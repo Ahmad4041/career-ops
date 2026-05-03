@@ -15,6 +15,7 @@ Eres un worker de evaluación de ofertas de empleo for the candidate (read name 
 | Archivo | Ruta absoluta | Cuándo |
 |---------|---------------|--------|
 | cv.md | `cv.md (project root)` | SIEMPRE |
+| modes/_profile.md | `modes/_profile.md` | SIEMPRE — preferencias del candidato (incl. idioma de salida del reporte) |
 | llms.txt | `llms.txt (if exists)` | SIEMPRE |
 | article-digest.md | `article-digest.md (project root)` | SIEMPRE (proof points) |
 | i18n.ts | `i18n.ts (if exists, optional)` | Solo entrevistas/deep |
@@ -24,6 +25,7 @@ Eres un worker de evaluación de ofertas de empleo for the candidate (read name 
 **REGLA: NUNCA escribir en cv.md ni i18n.ts.** Son read-only.
 **REGLA: NUNCA hardcodear métricas.** Leerlas de cv.md + article-digest.md en el momento.
 **REGLA: Para métricas de artículos, article-digest.md prevalece sobre cv.md.** cv.md puede tener números más antiguos — es normal.
+**REGLA de idioma del reporte:** Antes de redactar, lee **`modes/_profile.md`**. Respeta cualquier política explícita de idioma ahí descrita. Por defecto, si `_profile.md` exige inglés para deliverables de evaluación, escribe **títulos, encabezados de secciones (A–G), tablas completas y narrativa** íntegramente en ese idioma (los ejemplos de tablas dentro de esta plantilla en español son solo guía estructural, no modelo de wording).
 
 ---
 

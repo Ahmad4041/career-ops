@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!--
+  Minimal slot template — duplicates header/contact tokens + full cv.md as {{CONTENT_HTML}}.
+  Add more *.html files in templates/ side-by-side; the dashboard lists them automatically.
+-->
+<html lang="{{LANG}}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{NAME}} — CV</title>
+  <style>
+    @font-face {
+      font-family: 'DM Sans';
+      src: url('./fonts/dm-sans-latin.woff2') format('woff2');
+      font-weight: 400 700;
+      font-display: swap;
+    }
+    * { box-sizing: border-box; }
+    html { print-color-adjust: exact; }
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 11px;
+      line-height: 1.55;
+      color: #141820;
+      max-width: {{PAGE_WIDTH}};
+      margin: 0 auto;
+      padding: 12px;
+    }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    .contact { font-size: 10px; color: #556; margin-bottom: 16px; word-break: break-word; }
+    .cv-slot h2 { font-size: 13px; margin-top: 14px; }
+    .cv-slot h3 { font-size: 12px; margin-top: 10px; }
+    .cv-slot ul { padding-left: 18px; margin: 6px 0 0; }
+    .cv-slot p { margin: 6px 0 0; }
+  </style>
+</head>
+<body>
+  <h1>{{NAME}}</h1>
+  <div class="contact">{{PHONE}} · {{EMAIL}} · {{LOCATION}}</div>
+  <div class="cv-slot">{{CONTENT_HTML}}</div>
+</body>
+</html>

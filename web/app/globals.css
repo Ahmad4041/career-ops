@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0c10;
+  --fg: #e8eef8;
+}
+
+body {
+  @apply bg-surface text-[var(--fg)] antialiased min-h-screen;
+}

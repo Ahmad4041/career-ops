@@ -67,6 +67,22 @@ Or paste a JD directly to run the full pipeline.
 
 ---
 
+## Custom CV / LaTeX templates (user asks you to author or refactor)
+
+When the user wants **help writing**, **filling placeholders**, or **redesigning** a file under **`templates/`** (e.g. `cv-template.html`, `cv-minimal-slot.html`, `cv-template.tex`):
+
+1. Read **`templates/README.md`** → **"Asking the AI agent to write or refactor a template"** — HTML **full-token** vs **minimal `{{CONTENT_HTML}}`** layouts; LaTeX tokens per **`modes/latex.md`**.
+2. Inspect **`render-cv-html-from-template.mjs`** and/or **`render-cv-tex-from-template.mjs`** so `{{TOKEN}}` names stay consistent; do **not** hardcode résumé bullets or metrics — content comes from **`cv.md`** and **`config/profile.yml`** at render time.
+3. Put **tone, archetypes, and targeting** edits in **`modes/_profile.md`** / **`config/profile.yml`**, not in **`modes/_shared.md`** (see DATA_CONTRACT).
+
+When the user wants help with **allowlisted Markdown** in the repo (**`cv.md`**, **`modes/_profile.md`**, **`article-digest.md`**, **`interview-prep/story-bank.md`**, **`data/pipeline.md`**, **`data/follow-ups.md`**):
+
+1. Respect **DATA_CONTRACT.md** (user layer vs system layer); never move their personal narrative into **`modes/_shared.md`**.
+2. For **`cv.md`**, do not invent employers, dates, or metrics—organize and rephrase only from what they provide.
+3. For **`interview-prep/story-bank.md`**, preserve facts; improve STAR structure and clarity where asked.
+
+---
+
 ## Context Loading by Mode
 
 After determining the mode, load the necessary files before executing:

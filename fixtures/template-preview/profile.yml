@@ -1,0 +1,23 @@
+# Preview fixtures — dashboard HTML template mock render only (not your real profile).
+
+candidate:
+  full_name: "Alex Sample"
+  email: "preview@example.com"
+  phone: "+1 555 0100"
+  location: "Sample City, AU"
+  linkedin: "linkedin.com/in/alex-sample"
+  portfolio_url: "https://preview.example.dev"
+  github: "github.com/alex-sample"
+
+narrative:
+  headline: "Product-minded senior engineer — shipping and reliability"
+  exit_story: "Mock data for template preview. Your real story lives in config/profile.yml."
+  superpowers:
+    - "End-to-end web delivery"
+    - "Mentoring and runbooks"
+    - "Performance and observability"
+
+target_roles:
+  primary:
+    - "Senior Full Stack Engineer"
+    - "Staff Engineer"
