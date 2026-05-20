@@ -62,6 +62,15 @@ function apiReportHref(reportPath: string): string {
   return `/api/report/${parts.join('/')}`;
 }
 
+/** True when event target is typing in a form control (skip global `/` search focus). */
+function isTextFieldTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el) return false;
+  const n = el.tagName;
+  if (n === 'INPUT' || n === 'TEXTAREA' || n === 'SELECT') return true;
+  return el.isContentEditable;
+}
+
 type GitJson = Record<string, unknown>;
 
 function UpstreamGitPanel({
@@ -289,6 +298,7 @@ function DashboardPageInner() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [tableDensity, setTableDensity] = useState<TableDensity>('comfortable');
   const applicationsTableRef = useRef<HTMLElement | null>(null);
+  const applicationsSearchRef = useRef<HTMLInputElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const logViewportRef = useRef<HTMLPreElement | null>(null);
   const router = useRouter();
@@ -315,6 +325,28 @@ function DashboardPageInner() {
     setDebouncedSearch('');
     setStatusFilter('');
   }, []);
+
+  const clearSearchCommitted = useCallback(() => {
+    setFilterSearch('');
+    setDebouncedSearch('');
+  }, []);
+
+  /** Vim-style `/` focuses applications search (parity with Go TUI pipeline #526). */
+  useEffect(() => {
+    if (mainTab !== 'applications') return;
+    const onDocKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.repeat) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTextFieldTarget(e.target)) return;
+      e.preventDefault();
+      const el = applicationsSearchRef.current;
+      if (!el) return;
+      el.focus();
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+    document.addEventListener('keydown', onDocKey);
+    return () => document.removeEventListener('keydown', onDocKey);
+  }, [mainTab]);
 
   /** Hydrate from URL on load; apply browser navigation when URL diverges from derived query string. */
   useEffect(() => {
@@ -813,6 +845,14 @@ function DashboardPageInner() {
         );
       if (!okConfirm) return;
     }
+    if (cmd === 'scan-verify') {
+      const okConfirm =
+        typeof window !== 'undefined' &&
+        window.confirm(
+          'Run portal scan with --verify? Each new URL is checked in Playwright (Chromium) before pipeline append. Slower than scan alone; requires npx playwright install chromium.',
+        );
+      if (!okConfirm) return;
+    }
     const rootHint = data?.careerOpsRoot ?? '';
     setRunCmdBusy(cmd);
     setRunOutput({
@@ -868,6 +908,13 @@ function DashboardPageInner() {
             disabled={busyGlobal && runCmdBusy !== 'scan'}
             onClick={() => void runCmd('scan')}
             accent
+          />
+          <NavBtn
+            label="Scan + verify URLs"
+            pending={runCmdBusy === 'scan-verify'}
+            disabled={busyGlobal && runCmdBusy !== 'scan-verify'}
+            onClick={() => void runCmd('scan-verify')}
+            title="scan.mjs --verify — Playwright checks new postings before pipeline append"
           />
           <NavBtn
             label="Verify pipeline"
@@ -1014,8 +1061,10 @@ function DashboardPageInner() {
 
               <ApplicationsToolbar
                 anchorRef={applicationsTableRef}
+                searchInputRef={applicationsSearchRef}
                 filterSearch={filterSearch}
                 onFilterSearchChange={setFilterSearch}
+                onSearchEscape={clearSearchCommitted}
                 statusFilter={statusFilter}
                 onStatusFilterChange={setStatusFilter}
                 byStatus={data.metrics.byStatus}

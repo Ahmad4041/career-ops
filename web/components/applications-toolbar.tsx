@@ -7,8 +7,10 @@ import type { TableDensity } from '@/lib/table-density';
 
 export function ApplicationsToolbar({
   anchorRef,
+  searchInputRef,
   filterSearch,
   onFilterSearchChange,
+  onSearchEscape,
   statusFilter,
   onStatusFilterChange,
   byStatus,
@@ -21,8 +23,11 @@ export function ApplicationsToolbar({
   onDensityChange,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
+  searchInputRef?: RefObject<HTMLInputElement | null>;
   filterSearch: string;
   onFilterSearchChange: (value: string) => void;
+  /** Clear committed search (debounced + input); e.g. Escape in search field — matches TUI pipeline Esc. */
+  onSearchEscape?: () => void;
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
   byStatus: Record<string, number>;
@@ -42,9 +47,17 @@ export function ApplicationsToolbar({
         <label className="block min-w-0 flex-1 sm:max-w-md">
           <span className="text-[10px] font-medium uppercase tracking-wide text-muted">Search</span>
           <input
+            ref={searchInputRef}
             value={filterSearch}
             onChange={(e) => onFilterSearchChange(e.target.value)}
-            placeholder="Company, role, notes…"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && onSearchEscape) {
+                e.preventDefault();
+                onSearchEscape();
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            placeholder="Company, role, notes… (/ to focus)"
             className="mt-0.5 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-white placeholder:text-muted/80"
           />
         </label>
@@ -94,7 +107,9 @@ export function ApplicationsToolbar({
       </div>
       <p className="text-[11px] text-muted">
         Showing <strong className="text-white">{showingCount}</strong> of <strong className="text-white">{totalCount}</strong>{' '}
-        · Sorted by <span className="text-accent">{sortKey}</span> ({sortDir}) · ties break by # · Filters sync to the URL (
+        · Sorted by <span className="text-accent">{sortKey}</span> ({sortDir}) · ties break by # ·{' '}
+        <kbd className="rounded border border-border bg-black/30 px-1 font-mono text-[10px] text-muted">/</kbd> focuses
+        search · Filters sync to the URL (
         <code className="text-accent">q</code>, <code className="text-accent">status</code>,{' '}
         <code className="text-accent">sort</code>/<code className="text-accent">dir</code>) for bookmarks.
       </p>

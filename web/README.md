@@ -6,7 +6,7 @@ Small **Next.js** UI on top of your local career-ops repo: tracker + reports, **
 
 | Mechanism | Commands / routes |
 |-----------|-------------------|
-| `POST /api/run` | `scan`, `verify`, `merge`, `doctor`, `batch-runner-dry-run`, `batch-runner` |
+| `POST /api/run` | `scan`, `scan-verify` (`scan.mjs --verify`), `verify`, `merge`, `doctor`, `batch-runner-dry-run`, `batch-runner` |
 | `POST /api/cli/open` | `{ "target": "cursor" \| "claude-code" }` — detached launch of `cursor <repo>` or `claude` in the repo |
 | `POST /api/cli/claude-eval` | `{ "url": "https://...", "jdText"?: "..." }` — same pattern as `batch/batch-runner.sh`: `claude -p --dangerously-skip-permissions --append-system-prompt-file …` with `batch/batch-prompt.md` expanded |
 | `GET /api/cli/status` | Resolve `claude`, `cursor`, `bash` on `PATH` |
@@ -83,6 +83,8 @@ npm run dev
 ```
 
 Open [http://localhost:3100](http://localhost:3100).
+
+**Applications tab:** press **`/`** (when focus is not in an input) to jump to the search box — same idea as the Go TUI pipeline live search ([upstream #526](https://github.com/santifer/career-ops)). **Escape** in the search field clears the text query (status filter unchanged). Report **Preview** uses width-aware Markdown table wrapping ([upstream #513](https://github.com/santifer/career-ops)).
 
 Unit tests for tracker query helpers (Vitest):
 

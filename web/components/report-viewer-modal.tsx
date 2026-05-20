@@ -24,7 +24,7 @@ export function ReportViewerModal({ open, title, markdown, onClose }: Props) {
 
   const previewWrap = useMemo(
     () =>
-      '[&_a]:underline [&_a]:text-accent [&_strong]:text-white [&_h1]:mt-6 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mt-4 [&_h3]:font-medium [&_p]:leading-relaxed [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_code]:rounded [&_code]:bg-row [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border [&_pre]:bg-black/40 [&_pre]:p-3 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_td]:border [&_th]:border-border [&_td]:border-border [&_th]:px-2 [&_td]:px-2 [&_th]:py-1 [&_td]:py-1 [&_blockquote]:border-l-2 [&_blockquote]:border-accent/50 [&_blockquote]:pl-3',
+      '[&_a]:underline [&_a]:text-accent [&_a]:break-all [&_strong]:text-white [&_h1]:mt-6 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mt-4 [&_h3]:font-medium [&_p]:leading-relaxed [&_p]:break-words [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_code]:rounded [&_code]:bg-row [&_code]:px-1 [&_code]:break-all [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border [&_pre]:bg-black/40 [&_pre]:p-3 [&_pre]:break-words [&_table]:my-4 [&_table]:w-full [&_table]:max-w-full [&_table]:table-fixed [&_table]:border-collapse [&_table]:text-xs [&_th]:border [&_td]:border [&_th]:border-border [&_td]:border-border [&_th]:px-2 [&_td]:px-2 [&_th]:py-1 [&_td]:py-1 [&_th]:align-top [&_td]:align-top [&_th]:break-words [&_td]:break-words [&_th]:whitespace-normal [&_td]:whitespace-normal [&_blockquote]:border-l-2 [&_blockquote]:border-accent/50 [&_blockquote]:pl-3',
     [],
   );
 
@@ -69,7 +69,7 @@ export function ReportViewerModal({ open, title, markdown, onClose }: Props) {
           {mode === 'raw' ? (
             <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted">{markdown}</pre>
           ) : (
-            <article className={`prose-invert text-sm ${previewWrap}`}>
+            <article className={`prose-invert max-w-full min-w-0 overflow-x-auto text-sm ${previewWrap}`}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
             </article>
           )}

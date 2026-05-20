@@ -13,7 +13,7 @@ Prioritized plans for the Next.js dashboard (`web/`). Aligns with current code: 
 | **Metrics** | Total, avg/top score, PDF count, “actionable”, “by status” chips | Chips **toggle** filter for that normalized status (click again to clear) |
 | **Mobile / narrow** | `min-w-[960px]` table + horizontal scroll | Filters will need to sit **above** the table; consider stacked layout |
 | **Design tokens** | `tailwind.config.ts`: surface, muted, accent, row, border; minimal `:root` in `globals.css` | No semantic tokens for **success/warning/danger** rows; PDF column uses icon + `aria-label` (not emoji text) |
-| **Accessibility** | Sortable `<th>` use `aria-sort` when active; row open on Enter; **Escape** closes modals (`useEscapeClose`); dialogs use `aria-modal` | Full keyboard sort nav / roving tabindex still optional |
+| **Accessibility** | Sortable `<th>` use `aria-sort` when active; row open on Enter; **Escape** closes modals (`useEscapeClose`); dialogs use `aria-modal`; **`/`** focuses applications search when not typing in a field (parity with Go TUI #526); **Escape** in search clears text query | Full keyboard sort nav / roving tabindex still optional |
 | **Settings** | Split HTML preview, LaTeX PDF compile | Already stronger than main table UX |
 
 ---

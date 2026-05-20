@@ -6,10 +6,12 @@ import { resolveBinary } from '@/lib/resolve-binary';
 import { runWithTimeout } from '@/lib/spawn-timeout';
 
 const NODE = {
-  scan: { script: 'scan.mjs', timeoutMs: 300_000 },
-  verify: { script: 'verify-pipeline.mjs', timeoutMs: 120_000 },
-  merge: { script: 'merge-tracker.mjs', timeoutMs: 60_000 },
-  doctor: { script: 'doctor.mjs', timeoutMs: 60_000 },
+  scan: { script: 'scan.mjs', args: [] as string[], timeoutMs: 300_000 },
+  /** scan.mjs --verify — Playwright liveness check before pipeline append (upstream #487) */
+  'scan-verify': { script: 'scan.mjs', args: ['--verify'], timeoutMs: 900_000 },
+  verify: { script: 'verify-pipeline.mjs', args: [] as string[], timeoutMs: 120_000 },
+  merge: { script: 'merge-tracker.mjs', args: [] as string[], timeoutMs: 60_000 },
+  doctor: { script: 'doctor.mjs', args: [] as string[], timeoutMs: 60_000 },
 } as const;
 
 const BASH = {
@@ -17,9 +19,9 @@ const BASH = {
   'batch-runner': { script: 'batch-runner.sh', args: [] as string[], timeoutMs: 1_800_000 },
 } as const;
 
-async function runNode(root: string, scriptFile: string, timeoutMs: number) {
+async function runNode(root: string, scriptFile: string, scriptArgs: string[], timeoutMs: number) {
   const rel = scriptFile;
-  return runWithTimeout(process.execPath, [rel], {
+  return runWithTimeout(process.execPath, [rel, ...scriptArgs], {
     cwd: root,
     env: process.env,
     timeoutMs,
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    result = await runNode(root, spec.script, spec.timeoutMs);
+    result = await runNode(root, spec.script, [...spec.args], spec.timeoutMs);
   } else if (cmd in BASH) {
     const bk = cmd as keyof typeof BASH;
     key = bk;
