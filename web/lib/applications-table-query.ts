@@ -1,5 +1,6 @@
 import type { CareerApplication } from '@/lib/applications-parser';
 import { normalizeStatus } from '@/lib/normalize-tracker-status';
+import { normalizeCompanyKey } from '@/lib/tracker-duplicate-match';
 
 export type SortKey = 'score' | 'number' | 'date' | 'company' | 'role' | 'status';
 export type SortDir = 'asc' | 'desc';
@@ -15,6 +16,8 @@ export type TableQuery = {
   search: string;
   /** Normalized status key from `normalizeStatus()`; empty = all */
   statusNormalized: string;
+  /** Normalized company key from `normalizeCompanyKey()`; empty = all */
+  companyKey: string;
   sortKey: SortKey;
   sortDir: SortDir;
 };
@@ -57,12 +60,14 @@ export function sortApplications(rows: CareerApplication[], key: SortKey, dir: S
 
 export function filterApplications(
   rows: CareerApplication[],
-  opts: { search: string; statusNormalized: string },
+  opts: { search: string; statusNormalized: string; companyKey: string },
 ): CareerApplication[] {
   const q = opts.search.trim().toLowerCase();
   const st = opts.statusNormalized.trim().toLowerCase();
+  const ck = opts.companyKey.trim().toLowerCase();
   return rows.filter((row) => {
     if (st && normalizeStatus(row.status) !== st) return false;
+    if (ck && normalizeCompanyKey(row.company) !== ck) return false;
     if (!q) return true;
     const blob = `${row.company}\n${row.role}\n${row.notes}`.toLowerCase();
     return blob.includes(q);
@@ -73,8 +78,22 @@ export function filterThenSort(rows: CareerApplication[], q: TableQuery): Career
   const filtered = filterApplications(rows, {
     search: q.search,
     statusNormalized: q.statusNormalized,
+    companyKey: q.companyKey,
   });
   return sortApplications(filtered, q.sortKey, q.sortDir);
+}
+
+/** Unique companies for filter dropdown: key → display label (first seen casing). */
+export function companyFilterOptions(rows: CareerApplication[]): { key: string; label: string }[] {
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    const key = normalizeCompanyKey(row.company);
+    if (!key) continue;
+    if (!map.has(key)) map.set(key, row.company.trim() || key);
+  }
+  return [...map.entries()]
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
 }
 
 /** First sort direction when switching to a column (matches common spreadsheet defaults). */

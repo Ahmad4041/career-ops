@@ -6,6 +6,7 @@ import {
   patchApplicationInMarkdown,
   resolveApplicationsMdPath,
 } from '@/lib/applications-parser';
+import { annotateDuplicateLinks } from '@/lib/tracker-duplicate-match';
 import { readCandidateSlugFromProfile } from '@/lib/candidate-slug';
 import { getCareerOpsRoot } from '@/lib/root';
 import { normalizeStatusForPatch } from '@/lib/tracker-states';
@@ -14,6 +15,7 @@ export async function GET() {
   const root = getCareerOpsRoot();
   try {
     const { apps, trackerPath } = parseApplications(root);
+    annotateDuplicateLinks(apps);
     const metrics = computeMetrics(apps);
     return Response.json({
       careerOpsRoot: root,

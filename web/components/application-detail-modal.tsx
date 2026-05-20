@@ -17,6 +17,8 @@ export type AppRowLite = {
   reportNumber: string;
   notes: string;
   jobUrl: string;
+  duplicateOf?: number | null;
+  duplicateNote?: string | null;
   linkedPdfBasename?: string | null;
   linkedHtmlBasename?: string | null;
   linkedTexBasename?: string | null;
@@ -37,6 +39,7 @@ type Props = {
   onClose: () => void;
   onSaved: () => void;
   onViewReport: (reportPath: string, title: string) => void;
+  onOpenCanonical?: (applicationNumber: number) => void;
 };
 
 function reportStem(reportPath: string): string {
@@ -59,6 +62,7 @@ export function ApplicationDetailModal({
   onClose,
   onSaved,
   onViewReport,
+  onOpenCanonical,
 }: Props) {
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState('');
@@ -338,6 +342,20 @@ export function ApplicationDetailModal({
             ✕
           </button>
         </div>
+
+        {row.duplicateOf != null ? (
+          <div className="mt-4 rounded-lg border border-amber-500/35 bg-amber-950/25 px-3 py-2.5 text-sm text-amber-100/95">
+            <p>{row.duplicateNote ?? `Same company/role as application #${row.duplicateOf}.`}</p>
+            {onOpenCanonical ? (
+              <button
+                type="button"
+                onClick={() => onOpenCanonical(row.duplicateOf!)}
+                className="mt-2 text-xs font-medium text-amber-200 underline decoration-amber-400/60 hover:text-amber-50">
+                Open original application #{row.duplicateOf}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-5 space-y-4">
           <label className="block text-sm">

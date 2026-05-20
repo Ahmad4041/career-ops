@@ -24,6 +24,9 @@ export type CareerApplication = {
   linkedPdfBasename: string | null;
   linkedHtmlBasename: string | null;
   linkedTexBasename: string | null;
+  /** When set, this row is a later duplicate of tracker #duplicateOf (see merge-tracker rules). */
+  duplicateOf: number | null;
+  duplicateNote: string | null;
 };
 
 export type PipelineMetrics = {
@@ -202,6 +205,8 @@ export function parseApplications(root: string): { apps: CareerApplication[]; tr
       linkedPdfBasename: null,
       linkedHtmlBasename: null,
       linkedTexBasename: null,
+      duplicateOf: null,
+      duplicateNote: null,
     };
     apps.push(app);
   }

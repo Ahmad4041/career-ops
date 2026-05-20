@@ -13,6 +13,9 @@ export function ApplicationsToolbar({
   onSearchEscape,
   statusFilter,
   onStatusFilterChange,
+  companyFilter,
+  onCompanyFilterChange,
+  companyOptions,
   byStatus,
   onClearFilters,
   showingCount,
@@ -30,6 +33,9 @@ export function ApplicationsToolbar({
   onSearchEscape?: () => void;
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
+  companyFilter: string;
+  onCompanyFilterChange: (value: string) => void;
+  companyOptions: { key: string; label: string }[];
   byStatus: Record<string, number>;
   onClearFilters: () => void;
   showingCount: number;
@@ -77,6 +83,20 @@ export function ApplicationsToolbar({
               ))}
           </select>
         </label>
+        <label className="block w-full sm:w-52">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted">Company</span>
+          <select
+            value={companyFilter}
+            onChange={(e) => onCompanyFilterChange(e.target.value)}
+            className="mt-0.5 w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-white">
+            <option value="">All companies</option>
+            {companyOptions.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="flex flex-wrap items-end gap-2">
           <span className="text-[10px] font-medium uppercase tracking-wide text-muted">Density</span>
           <div className="inline-flex overflow-hidden rounded-lg border border-border">
@@ -111,7 +131,8 @@ export function ApplicationsToolbar({
         <kbd className="rounded border border-border bg-black/30 px-1 font-mono text-[10px] text-muted">/</kbd> focuses
         search · Filters sync to the URL (
         <code className="text-accent">q</code>, <code className="text-accent">status</code>,{' '}
-        <code className="text-accent">sort</code>/<code className="text-accent">dir</code>) for bookmarks.
+        <code className="text-accent">company</code>, <code className="text-accent">sort</code>/
+        <code className="text-accent">dir</code>) for bookmarks.
       </p>
     </section>
   );

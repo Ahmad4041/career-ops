@@ -1,19 +1,15 @@
 'use client';
 
-import type { RefObject } from 'react';
-
 import { trackerStatusToneClass } from '@/components/tracker-status-badge';
 
 export function ApplicationsStatusChips({
   byStatus,
   statusFilter,
   onToggleStatus,
-  scrollAnchorRef,
 }: {
   byStatus: Record<string, number>;
   statusFilter: string;
   onToggleStatus: (normalizedStatus: string) => void;
-  scrollAnchorRef: RefObject<HTMLElement | null>;
 }) {
   return (
     <section className="mb-6">
@@ -28,10 +24,7 @@ export function ApplicationsStatusChips({
                 key={status}
                 type="button"
                 title="Filter table by this status (click again to clear)"
-                onClick={() => {
-                  onToggleStatus(status);
-                  scrollAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
+                onClick={() => onToggleStatus(status)}
                 className={`rounded-full border px-3 py-1 text-sm transition ${
                   active
                     ? `${trackerStatusToneClass(status)} ring-2 ring-accent/60 ring-offset-2 ring-offset-surface`

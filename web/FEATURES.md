@@ -18,7 +18,7 @@ See also: [`README.md`](README.md) (API table), [`UX-ROADMAP.md`](UX-ROADMAP.md)
 | UI | File |
 |----|------|
 | Page shell, metrics, tabs | `app/page.tsx` |
-| Search, status, density | `components/applications-toolbar.tsx` |
+| Search, status, company, density | `components/applications-toolbar.tsx` |
 | Status chips (toggle filter) | `components/applications-status-chips.tsx` |
 | Virtualized table | `components/applications-table.tsx` |
 | Row cells | `components/applications-table-row.tsx` |
@@ -28,11 +28,18 @@ See also: [`README.md`](README.md) (API table), [`UX-ROADMAP.md`](UX-ROADMAP.md)
 | Logic | File |
 |-------|------|
 | Filter + sort | `lib/applications-table-query.ts` |
-| URL `?q=&status=&sort=&dir=` | `lib/applications-url-query.ts` |
+| URL `?q=&status=&company=&sort=&dir=` | `lib/applications-url-query.ts` |
+| Duplicate row links (same company/role/URL) | `lib/tracker-duplicate-match.ts` |
 | Density (localStorage) | `lib/table-density.ts` |
 | Parse tracker | `lib/applications-parser.ts` |
 
-**API:** `GET /api/applications` → reads `data/applications.md`.
+**API:** `GET /api/applications` → reads `data/applications.md`, annotates later duplicates with `duplicateOf` → lowest matching `#`.
+
+**Filters:** Text search (company/role/notes), status chips, **company dropdown** (normalized name key), sortable headers. Bookmark via URL.
+
+**Duplicates:** Rows that match an earlier application (merge-tracker rules) show **↩ same as #N**; click opens the original row. Evaluate on an existing posting URL still queues the job; logs note the canonical `#` and you can re-run.
+
+**Scroll:** Virtual rows use fixed height + padding rows in one `<table>` (no per-row absolute layers) to avoid column drift while scrolling.
 
 **Keyboard (Applications tab):**
 
@@ -204,11 +211,21 @@ Also: **Open Cursor** / **Open Claude Code** → `POST /api/cli/open`.
 
 Workers: `lib/jobs/run-claude-job.ts`, `run-cursor-job.ts`, `run-node-job.ts`.
 
+**Confirm before start:** Default is **bypass** (no browser popup). In **Settings → Dashboard → Job queue**, choose **Ask before starting** to restore `window.confirm` for Cursor agent, Claude evaluate, and node queue tasks. Preference: `lib/dashboard-prefs.ts` (`localStorage` key `careerOpsJobQueueConfirm`).
+
+**Evaluate job → Applications table:** Headless evaluation writes a report + `batch/tracker-additions/*.tsv`. The job runner then runs **`merge-tracker.mjs`** automatically so `data/applications.md` updates. On success the dashboard **reloads the tracker**, **clears filters**, and switches to the **Applications** tab (also polled every 8s if SSE drops).
+
+**Portal scan** (`portal_scan`) only updates **`data/pipeline.md`** — new URLs do not appear in the Applications table until you **evaluate** them.
+
 ---
 
 ## 7. Settings (`/settings`)
 
+**Dashboard panel (browser-only):** Job queue confirm mode (bypass vs ask) — see §6.
+
 Edit allowlisted paths (`cv.md`, `config/profile.yml`, `portals.yml`, `modes/_profile.md`, templates).  
+
+**Templates list:** Every `templates/*.html` and `templates/*.tex` on disk (e.g. `cv-template.html`, `cv-minimal-slot.html`, custom layouts) appears under **Templates** — discovered at load time, same rules as `GET /api/pdf/templates`. Plus `templates/README.md`.
 
 **API:** `GET /api/settings`, `GET/PUT /api/settings/file` — allowlist in `lib/settings-allowlist.ts`.
 

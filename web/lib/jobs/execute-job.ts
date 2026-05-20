@@ -1,5 +1,7 @@
+import { parseApplications } from '@/lib/applications-parser';
 import { resolveBinary } from '@/lib/resolve-binary';
 import { getCareerOpsRoot } from '@/lib/root';
+import { findDuplicateByUrl } from '@/lib/tracker-duplicate-match';
 
 import { appendLog, createJob, getJob, setJobStatus } from './store';
 import { runClaudeEvaluateJob } from './run-claude-job';
@@ -15,16 +17,36 @@ export type CreateJobInput = {
   jdText?: string;
 };
 
-export function enqueueJob(body: CreateJobInput): { id: string; error?: string; status?: number } {
+export function enqueueJob(body: CreateJobInput): {
+  id: string;
+  error?: string;
+  status?: number;
+  duplicateOf?: number;
+  duplicateWarning?: string;
+} {
   const meta: Record<string, unknown> = {
     url: body.url,
     jdText: body.jdText,
   };
+  let duplicateOf: number | undefined;
+  let duplicateWarning: string | undefined;
 
   if (body.operation === 'evaluate_job') {
     const url = body.url?.trim() ?? '';
     if (!URL_RE.test(url)) {
       return { id: '', error: 'evaluate_job requires a valid https URL in `url`', status: 400 };
+    }
+    try {
+      const root = getCareerOpsRoot();
+      const { apps } = parseApplications(root);
+      const dup = findDuplicateByUrl(apps, url);
+      if (dup) {
+        duplicateOf = dup.number;
+        duplicateWarning = `Same posting URL as application #${dup.number} (${dup.company} — ${dup.role}). You can re-run; merge-tracker updates the tracker row.`;
+        meta.duplicateOf = dup.number;
+      }
+    } catch {
+      /* tracker unreadable — still allow enqueue */
     }
     if (body.provider === 'claude') {
       const claudeBin = resolveBinary('CLAUDE_CLI_PATH', 'claude');
@@ -51,7 +73,7 @@ export function enqueueJob(body: CreateJobInput): { id: string; error?: string; 
   void runJob(id, body).catch(() => {
     /* finalize should still run inside runJob finally */
   });
-  return { id };
+  return { id, duplicateOf, duplicateWarning };
 }
 
 async function runJob(jobId: string, body: CreateJobInput): Promise<void> {
@@ -59,6 +81,16 @@ async function runJob(jobId: string, body: CreateJobInput): Promise<void> {
   if (!jobBefore) return;
 
   appendLog(jobId, 'info', `Job ${jobId} started (${body.provider} / ${body.operation})`);
+
+  const dupNum =
+    typeof jobBefore.meta.duplicateOf === 'number' ? (jobBefore.meta.duplicateOf as number) : null;
+  if (dupNum != null && body.operation === 'evaluate_job') {
+    appendLog(
+      jobId,
+      'info',
+      `⚠ Already in tracker as application #${dupNum}. Re-run allowed — logs continue here; merge-tracker may update the same row.`,
+    );
+  }
 
   try {
     setJobStatus(jobId, 'running');
@@ -101,6 +133,26 @@ async function runJob(jobId: string, body: CreateJobInput): Promise<void> {
     }
 
     appendLog(jobId, 'info', `Process finished with exit code ${code}`);
+
+    if (code === 0 && body.operation === 'evaluate_job') {
+      appendLog(jobId, 'info', 'Merging tracker additions into applications.md…');
+      const mergeCode = await runNodeScriptJob(
+        jobId,
+        process.execPath,
+        root,
+        'merge-tracker.mjs',
+        120_000,
+      );
+      if (mergeCode !== 0) {
+        appendLog(
+          jobId,
+          'stderr',
+          'merge-tracker.mjs failed — new row may be missing until you run Merge tracker (nav) or `node merge-tracker.mjs`.',
+        );
+        code = mergeCode;
+      }
+    }
+
     setJobStatus(jobId, code === 0 ? 'completed' : 'failed', code);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

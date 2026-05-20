@@ -18,6 +18,7 @@ export function ApplicationsTable({
   sortDir,
   onSort,
   onRowOpen,
+  onOpenByNumber,
   onClearFilters,
   density,
 }: {
@@ -26,6 +27,7 @@ export function ApplicationsTable({
   sortDir: SortDir;
   onSort: (k: SortKey) => void;
   onRowOpen: (row: AppRow) => void;
+  onOpenByNumber: (num: number) => void;
   onClearFilters: () => void;
   density: TableDensity;
 }) {
@@ -38,23 +40,38 @@ export function ApplicationsTable({
     count: rows.length,
     getScrollElement: () => scrollParentRef.current,
     estimateSize: () => rowPx,
-    overscan: 8,
+    overscan: 6,
+    getItemKey: (index) => rows[index]?.number ?? index,
   });
 
   const virtualItems = rows.length > 0 ? virtualizer.getVirtualItems() : [];
-  const paddingTop = virtualItems.length > 0 ? virtualItems[0]!.start : 0;
-  const paddingBottom =
-    virtualItems.length > 0 ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1]!.end : 0;
+  const padTop = virtualItems.length > 0 ? virtualItems[0]!.start : 0;
+  const padBottom =
+    virtualItems.length > 0
+      ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1]!.end
+      : 0;
 
   return (
     <section className="overflow-hidden rounded-xl border border-border">
       <div
         ref={scrollParentRef}
-        className="max-h-[min(70vh,640px)] overflow-auto overflow-x-auto"
+        className="max-h-[min(70vh,640px)] overflow-auto overflow-x-auto overscroll-contain"
         role="region"
         aria-label="Applications table — scroll for more rows">
-        <table className="w-full min-w-[980px] text-left text-sm">
-          <thead className="sticky top-0 z-[2] border-b border-border bg-row/95 backdrop-blur-sm">
+        <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-sm">
+          <colgroup>
+            <col className="w-[3rem]" />
+            <col className="w-[6.5rem]" />
+            <col className="w-[11rem]" />
+            <col />
+            <col className="w-[4.5rem]" />
+            <col className="w-[7.5rem]" />
+            <col className="w-[3rem]" />
+            <col className="w-[4.5rem]" />
+            <col className="w-[4.5rem]" />
+            <col className="w-[8rem]" />
+          </colgroup>
+          <thead className="sticky top-0 z-[2] border-b border-border bg-row shadow-[0_1px_0_0_rgba(255,255,255,0.06)]">
             <tr>
               <SortHeader
                 label="#"
@@ -131,22 +148,35 @@ export function ApplicationsTable({
               </tr>
             ) : (
               <>
-                {paddingTop > 0 ? (
-                  <tr className="pointer-events-none" aria-hidden>
-                    <td colSpan={COL_COUNT} style={{ height: paddingTop }} />
+                {padTop > 0 ? (
+                  <tr aria-hidden className="pointer-events-none border-0">
+                    <td
+                      colSpan={COL_COUNT}
+                      className="border-0 p-0"
+                      style={{ height: padTop, lineHeight: 0 }}
+                    />
                   </tr>
                 ) : null}
-                {virtualItems.map((vi) => (
-                  <ApplicationsTableRow
-                    key={`${rows[vi.index]!.number}-${rows[vi.index]!.company}`}
-                    row={rows[vi.index]!}
-                    cellPadClass={cp}
-                    onRowOpen={onRowOpen}
-                  />
-                ))}
-                {paddingBottom > 0 ? (
-                  <tr className="pointer-events-none" aria-hidden>
-                    <td colSpan={COL_COUNT} style={{ height: paddingBottom }} />
+                {virtualItems.map((vi) => {
+                  const row = rows[vi.index]!;
+                  return (
+                    <ApplicationsTableRow
+                      key={row.number}
+                      row={row}
+                      rowHeightPx={rowPx}
+                      cellPadClass={cp}
+                      onRowOpen={onRowOpen}
+                      onOpenByNumber={onOpenByNumber}
+                    />
+                  );
+                })}
+                {padBottom > 0 ? (
+                  <tr aria-hidden className="pointer-events-none border-0">
+                    <td
+                      colSpan={COL_COUNT}
+                      className="border-0 p-0"
+                      style={{ height: padBottom, lineHeight: 0 }}
+                    />
                   </tr>
                 ) : null}
               </>
@@ -155,8 +185,7 @@ export function ApplicationsTable({
         </table>
       </div>
       <p className="border-t border-border px-3 py-2 text-xs text-muted">
-        Click any row for status, PDF, and report controls. Scroll inside the table area when there are many rows
-        (virtualized rendering).
+        Click any row for status, PDF, and report controls. Duplicate rows link back to the original application #.
       </p>
     </section>
   );

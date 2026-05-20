@@ -2,6 +2,13 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import {
+  jobQueueConfirmLabel,
+  loadJobQueueConfirm,
+  saveJobQueueConfirm,
+  type JobQueueConfirmMode,
+} from '@/lib/dashboard-prefs';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -400,6 +407,43 @@ const GROUP_TITLE: Record<(typeof GROUP_ORDER)[number], string> = {
   templates: 'Templates',
 };
 
+function DashboardPrefsPanel() {
+  const [jobQueueConfirm, setJobQueueConfirm] = useState<JobQueueConfirmMode>('bypass');
+
+  useEffect(() => {
+    setJobQueueConfirm(loadJobQueueConfirm());
+  }, []);
+
+  const onJobQueueConfirmChange = useCallback((mode: JobQueueConfirmMode) => {
+    setJobQueueConfirm(mode);
+    saveJobQueueConfirm(mode);
+  }, []);
+
+  return (
+    <section className="mb-4 rounded-lg border border-border bg-row/40 p-3">
+      <h2 className="text-[10px] font-medium uppercase tracking-wide text-muted">Dashboard</h2>
+      <p className="mt-1 text-[11px] text-muted">
+        Stored in this browser only (localStorage). Repo files below are unchanged.
+      </p>
+      <label className="mt-3 block text-xs">
+        <span className="text-muted">Job queue (Claude / Cursor / node tasks)</span>
+        <select
+          value={jobQueueConfirm}
+          onChange={(e) => onJobQueueConfirmChange(e.target.value as JobQueueConfirmMode)}
+          className="mt-1 w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-white">
+          <option value="bypass">{jobQueueConfirmLabel('bypass')}</option>
+          <option value="ask">{jobQueueConfirmLabel('ask')}</option>
+        </select>
+        <p className="mt-1.5 text-[10px] leading-snug text-muted">
+          <strong className="text-white/90">Bypass</strong> — enqueue evaluate/scan jobs immediately.{' '}
+          <strong className="text-white/90">Ask</strong> — browser confirm before starting (Cursor agent
+          warning, Claude long run, node tasks).
+        </p>
+      </label>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const [catalog, setCatalog] = useState<FileInfo[]>([]);
   const [root, setRoot] = useState('');
@@ -595,6 +639,9 @@ export default function SettingsPage() {
             Edit allowlisted user files and CV templates. Paths are validated server-side.
           </p>
           {root && <p className="mt-2 break-all font-mono text-[10px] text-muted">{root}</p>}
+          <div className="mt-3">
+            <DashboardPrefsPanel />
+          </div>
         </div>
         <nav className="flex-1 overflow-y-auto p-2">
           {loadingCatalog && <p className="px-2 text-xs text-muted">Loading…</p>}

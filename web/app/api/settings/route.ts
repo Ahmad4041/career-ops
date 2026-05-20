@@ -1,12 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-import { EDITABLE_SETTINGS_FILES } from '@/lib/settings-allowlist';
+import { buildSettingsFileCatalog } from '@/lib/settings-allowlist';
 import { getCareerOpsRoot } from '@/lib/root';
 
 export async function GET() {
   const root = getCareerOpsRoot();
-  const files = EDITABLE_SETTINGS_FILES.map((m) => {
+  const files = buildSettingsFileCatalog(root).map((m) => {
     const abs = path.join(root, ...m.path.split('/'));
     let exists = false;
     try {

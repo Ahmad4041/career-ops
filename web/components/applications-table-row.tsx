@@ -8,12 +8,16 @@ import type { AppRow } from '@/types/dashboard';
 
 export const ApplicationsTableRow = memo(function ApplicationsTableRow({
   row,
+  rowHeightPx,
   cellPadClass,
   onRowOpen,
+  onOpenByNumber,
 }: {
   row: AppRow;
+  rowHeightPx: number;
   cellPadClass: string;
   onRowOpen: (row: AppRow) => void;
+  onOpenByNumber: (num: number) => void;
 }) {
   const cp = cellPadClass;
   return (
@@ -22,11 +26,28 @@ export const ApplicationsTableRow = memo(function ApplicationsTableRow({
       role="button"
       onClick={() => onRowOpen(row)}
       onKeyDown={(ev) => ev.key === 'Enter' && onRowOpen(row)}
-      className="cursor-pointer border-b border-border/80 text-sm hover:bg-row/60">
+      style={{ height: rowHeightPx, maxHeight: rowHeightPx }}
+      className={`cursor-pointer border-b border-border/80 text-sm hover:bg-row/60 ${
+        row.duplicateOf != null ? 'bg-amber-950/15' : ''
+      }`}>
       <td className={`${cp} font-mono text-xs tabular-nums text-muted`}>{row.number}</td>
       <td className={`${cp} whitespace-nowrap font-mono text-xs tabular-nums text-muted`}>{row.date || '—'}</td>
-      <td className={`${cp} font-medium leading-snug text-white`}>{row.company}</td>
-      <td className={`max-w-[220px] ${cp} leading-snug text-muted`}>{row.role}</td>
+      <td className={`${cp} font-medium leading-snug text-white`}>
+        <span className="block truncate">{row.company}</span>
+        {row.duplicateOf != null ? (
+          <button
+            type="button"
+            title={row.duplicateNote ?? `Linked to application #${row.duplicateOf}`}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onOpenByNumber(row.duplicateOf!);
+            }}
+            className="mt-0.5 truncate text-left text-[10px] font-medium text-amber-200/90 underline decoration-amber-400/50 hover:text-amber-100">
+            ↩ same as #{row.duplicateOf}
+          </button>
+        ) : null}
+      </td>
+      <td className={`${cp} truncate leading-snug text-muted`}>{row.role}</td>
       <td className={`${cp} text-right font-mono text-sm tabular-nums text-accent`}>
         <span title={`Numeric score used for sorting: ${row.score}`}>{row.scoreRaw || '—'}</span>
       </td>
@@ -93,7 +114,7 @@ export const ApplicationsTableRow = memo(function ApplicationsTableRow({
           <span className="text-muted">—</span>
         )}
       </td>
-      <td className={`max-w-[140px] truncate ${cp} text-sm`}>
+      <td className={`truncate ${cp} text-sm`}>
         {row.jobUrl ? (
           <span className="text-accent" role="presentation" onClick={(ev) => ev.stopPropagation()}>
             <a

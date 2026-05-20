@@ -71,5 +71,8 @@ export async function POST(request: Request) {
     jobId: r.id,
     detailUrl: `/api/jobs/${r.id}`,
     streamUrl: `/api/jobs/${r.id}/stream`,
+    ...(r.duplicateOf != null
+      ? { duplicateOf: r.duplicateOf, duplicateWarning: r.duplicateWarning }
+      : {}),
   });
 }

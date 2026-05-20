@@ -14,6 +14,8 @@ export type AppRow = {
   linkedPdfBasename: string | null;
   linkedHtmlBasename: string | null;
   linkedTexBasename: string | null;
+  duplicateOf: number | null;
+  duplicateNote: string | null;
 };
 
 export type PipelineMetrics = {

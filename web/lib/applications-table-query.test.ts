@@ -24,9 +24,13 @@ function app(p: Partial<CareerApplication> & Pick<CareerApplication, 'number' | 
     linkedPdfBasename: p.linkedPdfBasename ?? null,
     linkedHtmlBasename: p.linkedHtmlBasename ?? null,
     linkedTexBasename: p.linkedTexBasename ?? null,
+    duplicateOf: p.duplicateOf ?? null,
+    duplicateNote: p.duplicateNote ?? null,
     ...p,
   };
 }
+
+const noExtraFilters = { search: '', statusNormalized: '', companyKey: '' };
 
 describe('isSortKey', () => {
   it('accepts valid column keys', () => {
@@ -56,24 +60,30 @@ describe('filterApplications', () => {
   ];
 
   it('returns all when no search and no status', () => {
-    expect(filterApplications(rows, { search: '', statusNormalized: '' })).toHaveLength(2);
+    expect(filterApplications(rows, noExtraFilters)).toHaveLength(2);
   });
 
   it('filters by search in company (case-insensitive)', () => {
-    const r = filterApplications(rows, { search: 'acm', statusNormalized: '' });
+    const r = filterApplications(rows, { ...noExtraFilters, search: 'acm' });
     expect(r).toHaveLength(1);
     expect(r[0]!.company).toBe('Acme');
   });
 
   it('filters by search in notes', () => {
-    const r = filterApplications(rows, { search: 'try', statusNormalized: '' });
+    const r = filterApplications(rows, { ...noExtraFilters, search: 'try' });
     expect(r).toHaveLength(1);
   });
 
   it('filters by normalized status', () => {
-    const r = filterApplications(rows, { search: '', statusNormalized: 'evaluated' });
+    const r = filterApplications(rows, { ...noExtraFilters, statusNormalized: 'evaluated' });
     expect(r).toHaveLength(1);
     expect(r[0]!.number).toBe(1);
+  });
+
+  it('filters by company key', () => {
+    const r = filterApplications(rows, { ...noExtraFilters, companyKey: 'other' });
+    expect(r).toHaveLength(1);
+    expect(r[0]!.number).toBe(2);
   });
 });
 
@@ -108,6 +118,7 @@ describe('filterThenSort', () => {
     const out = filterThenSort(rows, {
       search: 'acme',
       statusNormalized: '',
+      companyKey: '',
       sortKey: 'score',
       sortDir: 'desc',
     });

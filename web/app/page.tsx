@@ -6,11 +6,13 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import {
+  companyFilterOptions,
   defaultSortDirForKey,
   filterThenSort,
   type SortDir,
   type SortKey,
 } from '@/lib/applications-table-query';
+import { shouldConfirmBeforeEnqueue } from '@/lib/dashboard-prefs';
 import { buildTableQueryString, parseTableQueryFromUrl } from '@/lib/applications-url-query';
 import { loadTableDensity, saveTableDensity, type TableDensity } from '@/lib/table-density';
 import { ApplicationsStatusChips } from '@/components/applications-status-chips';
@@ -294,11 +296,13 @@ function DashboardPageInner() {
   const [filterSearch, setFilterSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [tableDensity, setTableDensity] = useState<TableDensity>('comfortable');
   const applicationsTableRef = useRef<HTMLElement | null>(null);
   const applicationsSearchRef = useRef<HTMLInputElement>(null);
+  const jobStatusRef = useRef<Map<string, string> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const logViewportRef = useRef<HTMLPreElement | null>(null);
   const router = useRouter();
@@ -324,6 +328,7 @@ function DashboardPageInner() {
     setFilterSearch('');
     setDebouncedSearch('');
     setStatusFilter('');
+    setCompanyFilter('');
   }, []);
 
   const clearSearchCommitted = useCallback(() => {
@@ -356,6 +361,7 @@ function DashboardPageInner() {
       setFilterSearch(p.q);
       setDebouncedSearch(p.q);
       setStatusFilter(p.status);
+      setCompanyFilter(p.company);
       setSortKey(p.sortKey);
       setSortDir(p.sortDir);
       tableUrlReadyRef.current = true;
@@ -365,6 +371,7 @@ function DashboardPageInner() {
     const built = buildTableQueryString({
       q: debouncedSearch,
       status: statusFilter,
+      company: companyFilter,
       sortKey,
       sortDir,
     });
@@ -374,6 +381,7 @@ function DashboardPageInner() {
 
     if (filterSearch !== debouncedSearch) {
       setStatusFilter(p.status);
+      setCompanyFilter(p.company);
       setSortKey(p.sortKey);
       setSortDir(p.sortDir);
       return;
@@ -382,6 +390,7 @@ function DashboardPageInner() {
     setFilterSearch(p.q);
     setDebouncedSearch(p.q);
     setStatusFilter(p.status);
+    setCompanyFilter(p.company);
     setSortKey(p.sortKey);
     setSortDir(p.sortDir);
     // deps: [searchParams] only — react to URL changes (including replace/back), not to local edits before replace.
@@ -394,12 +403,13 @@ function DashboardPageInner() {
     const built = buildTableQueryString({
       q: debouncedSearch,
       status: statusFilter,
+      company: companyFilter,
       sortKey,
       sortDir,
     });
     if (built === searchParams.toString()) return;
     router.replace(built ? `${pathname}?${built}` : pathname, { scroll: false });
-  }, [debouncedSearch, statusFilter, sortKey, sortDir, pathname, router, searchParams]);
+  }, [debouncedSearch, statusFilter, companyFilter, sortKey, sortDir, pathname, router, searchParams]);
 
   const onSortHeaderClick = useCallback((key: SortKey) => {
     setSortKey((prev) => {
@@ -417,10 +427,24 @@ function DashboardPageInner() {
     return filterThenSort(data.applications, {
       search: debouncedSearch,
       statusNormalized: statusFilter,
+      companyKey: companyFilter,
       sortKey,
       sortDir,
     });
-  }, [data?.applications, debouncedSearch, statusFilter, sortKey, sortDir]);
+  }, [data?.applications, debouncedSearch, statusFilter, companyFilter, sortKey, sortDir]);
+
+  const companyOptions = useMemo(
+    () => (data?.applications?.length ? companyFilterOptions(data.applications) : []),
+    [data?.applications],
+  );
+
+  const openApplicationByNumber = useCallback(
+    (num: number) => {
+      const row = data?.applications?.find((a) => a.number === num);
+      if (row) setSelectedApp(row);
+    },
+    [data?.applications],
+  );
 
   const load = useCallback(async () => {
     setLoadErr(null);
@@ -456,6 +480,8 @@ function DashboardPageInner() {
       reportNumber: selectedApp.reportNumber,
       notes: selectedApp.notes,
       jobUrl: selectedApp.jobUrl,
+      duplicateOf: selectedApp.duplicateOf,
+      duplicateNote: selectedApp.duplicateNote,
     };
   }, [selectedApp]);
 
@@ -571,16 +597,50 @@ function DashboardPageInner() {
     }
   }, [refreshGitStatus, load]);
 
+  /** Reload tracker after agent jobs; evaluate success also switches to Applications (rows live in applications.md). */
+  const handleJobFinished = useCallback(
+    async (job: Pick<JobSummary, 'operation' | 'status'>) => {
+      await load();
+      if (job.status === 'completed' && job.operation === 'evaluate_job') {
+        clearApplicationFilters();
+        setMainTab('applications');
+        requestAnimationFrame(() => {
+          applicationsTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      } else if (job.status === 'completed' && job.operation === 'merge_tracker') {
+        setMainTab('applications');
+      }
+    },
+    [load, clearApplicationFilters],
+  );
+
   const refreshJobList = useCallback(async () => {
     try {
       const res = await fetch('/api/jobs', { cache: 'no-store' });
       if (!res.ok) return;
       const json = (await res.json()) as { jobs?: JobSummary[] };
-      setJobSummaries(json.jobs ?? []);
+      const jobs = json.jobs ?? [];
+
+      if (jobStatusRef.current === null) {
+        jobStatusRef.current = new Map(jobs.map((j) => [j.id, j.status]));
+      } else {
+        for (const j of jobs) {
+          const prev = jobStatusRef.current.get(j.id);
+          if (
+            (prev === 'queued' || prev === 'running') &&
+            (j.status === 'completed' || j.status === 'failed')
+          ) {
+            void handleJobFinished(j);
+          }
+          jobStatusRef.current.set(j.id, j.status);
+        }
+      }
+
+      setJobSummaries(jobs);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [handleJobFinished]);
 
   useEffect(() => {
     void refreshJobList();
@@ -637,8 +697,30 @@ function DashboardPageInner() {
           });
           es.close();
           eventSourceRef.current = null;
-          void refreshJobList();
-          void load();
+          void (async () => {
+            const finishedId = streamJobId;
+            const finishedStatus = term.status === 'failed' ? 'failed' : 'completed';
+            if (finishedId) {
+              if (jobStatusRef.current === null) jobStatusRef.current = new Map();
+              jobStatusRef.current.set(finishedId, finishedStatus);
+            }
+            await refreshJobList();
+            if (!finishedId) {
+              void load();
+              return;
+            }
+            try {
+              const res = await fetch(`/api/jobs/${finishedId}`, { cache: 'no-store' });
+              if (res.ok) {
+                const j = (await res.json()) as JobSummary;
+                await handleJobFinished(j);
+              } else {
+                void load();
+              }
+            } catch {
+              void load();
+            }
+          })();
         }
       } catch {
         /* malformed chunk */
@@ -668,7 +750,7 @@ function DashboardPageInner() {
       es.close();
       eventSourceRef.current = null;
     };
-  }, [streamJobId, refreshJobList, load]);
+  }, [streamJobId, refreshJobList, load, handleJobFinished]);
 
   useEffect(() => {
     const el = logViewportRef.current;
@@ -780,12 +862,17 @@ function DashboardPageInner() {
         setMainTab('output');
         return;
       }
-      const msg =
-        jobProvider === 'cursor'
-          ? 'Start Cursor Agent CLI (`cursor agent --print` or `cursor-agent`)? Uses your Cursor account; ensure `cursor agent` works in a terminal (and CURSOR_API_KEY or `cursor agent login`).'
-          : 'Start Claude Code headless pipeline (claude -p)? This can take many minutes.';
-      if (!window.confirm(msg)) return;
-    } else if (!window.confirm(`Run backend node task “${operation}”?`)) {
+      if (shouldConfirmBeforeEnqueue()) {
+        const msg =
+          jobProvider === 'cursor'
+            ? 'Start Cursor Agent CLI (`cursor agent --print` or `cursor-agent`)? Uses your Cursor account; ensure `cursor agent` works in a terminal (and CURSOR_API_KEY or `cursor agent login`).'
+            : 'Start Claude Code headless pipeline (claude -p)? This can take many minutes.';
+        if (!window.confirm(msg)) return;
+      }
+    } else if (
+      shouldConfirmBeforeEnqueue() &&
+      !window.confirm(`Run backend node task “${operation}”?`)
+    ) {
       return;
     }
 
@@ -806,16 +893,25 @@ function DashboardPageInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const j = (await res.json()) as { jobId?: string; error?: string };
+      const j = (await res.json()) as {
+        jobId?: string;
+        error?: string;
+        duplicateOf?: number;
+        duplicateWarning?: string;
+      };
       if (!res.ok) throw new Error(j.error ?? res.statusText);
       if (!j.jobId) throw new Error('No jobId returned');
       setStreamJobId(j.jobId);
       await refreshJobList();
       setDrawerOpen(true);
+      const dupLine =
+        j.duplicateOf != null
+          ? `\n\n⚠ Already in tracker as application #${j.duplicateOf}. ${j.duplicateWarning ?? 'Re-run will merge/update the same row after merge-tracker.'}`
+          : '';
       setRunOutput({
         ok: true,
         exitCode: 0,
-        stdout: `Queued job ${j.jobId}. Streaming agent CLI output below (SSE).`,
+        stdout: `Queued job ${j.jobId}. Streaming agent CLI output below (SSE).${dupLine}`,
         stderr: '',
         careerOpsRoot: data?.careerOpsRoot ?? '',
         title: 'Agent job queue',
@@ -1056,7 +1152,6 @@ function DashboardPageInner() {
                 onToggleStatus={(s) =>
                   setStatusFilter((f) => (f === s ? '' : s))
                 }
-                scrollAnchorRef={applicationsTableRef}
               />
 
               <ApplicationsToolbar
@@ -1067,6 +1162,9 @@ function DashboardPageInner() {
                 onSearchEscape={clearSearchCommitted}
                 statusFilter={statusFilter}
                 onStatusFilterChange={setStatusFilter}
+                companyFilter={companyFilter}
+                onCompanyFilterChange={setCompanyFilter}
+                companyOptions={companyOptions}
                 byStatus={data.metrics.byStatus}
                 onClearFilters={clearApplicationFilters}
                 showingCount={displayApplications.length}
@@ -1083,6 +1181,7 @@ function DashboardPageInner() {
                 sortDir={sortDir}
                 onSort={onSortHeaderClick}
                 onRowOpen={setSelectedApp}
+                onOpenByNumber={openApplicationByNumber}
                 onClearFilters={clearApplicationFilters}
                 density={tableDensity}
               />
@@ -1281,6 +1380,7 @@ function DashboardPageInner() {
         onClose={closeApplicationModal}
         onSaved={onApplicationSaved}
         onViewReport={openReport}
+        onOpenCanonical={openApplicationByNumber}
       />
 
       <QueueJobModal
