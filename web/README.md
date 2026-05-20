@@ -121,6 +121,10 @@ Lines like `cursor-retrieval: tracing to '…/cursor_retrieval….log'` come fro
 
 **LinkedIn posting URLs** often block headless or unauthenticated fetches. If the agent cannot read the JD from the URL, paste the job description into **optional JD text** in the form, or use a careers-page / Greenhouse / Ashby / Lever link when possible.
 
+## Feature guide (incl. Generate PDF)
+
+See **`FEATURES.md`** for a full walkthrough: applications table, modals, **HTML → PDF pipeline** (dashboard + API + CLI), scan/verify, jobs, settings, and upstream TUI.
+
 ## UX roadmap
 
 See **`UX-ROADMAP.md`** for dashboard UX notes. Applications filters and sort sync to the URL (`q`, `status`, `sort`, `dir`) for bookmarks and sharing. Agent guidance: **`.cursor/skills/career-ops-frontend/SKILL.md`**.

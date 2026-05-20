@@ -77,5 +77,6 @@ When extending tables:
 
 ## See also
 
+- `web/FEATURES.md` — full feature guide (applications, **generate PDF**, scan, jobs, settings)
 - `web/UX-ROADMAP.md` — prioritized table, filter, and visual improvements
 - `web/README.md` — API routes used by the dashboard
