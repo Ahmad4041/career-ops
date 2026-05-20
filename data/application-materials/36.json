@@ -1,0 +1,12 @@
+{
+  "applicationNumber": 36,
+  "company": "Quantium",
+  "role": "Senior Full Stack Engineer (AI)",
+  "reportPath": "reports/036-quantium-senior-full-stack-engineer-ai-2026-05-20.md",
+  "updatedAt": "2026-05-20T17:09:57.723Z",
+  "summary": "",
+  "coverLetter": "Dear Quantium team,\n\nYour Senior Full Stack Engineer (AI) posting in Sydney stood out because Quantium ships production platforms for enterprise clients in retail, health, government, and financial services—while integrating AI features with data scientists when they make product sense, not as a headline-only ML role. That balance of consulting delivery, system design, and pragmatic AI is where I have been building for years.\n\nAt CMB I contributed to GPOW global wire payments in a Wells Fargo context: full-stack Spring and React with TDD discipline and strong unit-test coverage on critical banking flows. I helped decompose monoliths into microservices and built Node/Express and Spring services with REST, SOAP, and WebSockets for live operator updates, plus AWS CloudWatch and Splunk for production support. Earlier, on Upwork, I delivered React and TypeScript UI modules for payments and banking workflows, and at Simcoe IT I built cruise platforms for Holland America and Seabourn spanning bookings, itineraries, payments, and live location.\n\nSince 2021 I have maintained an open-source footprint in LangChain and LLM tooling while completing a Master of Applied AI at Deakin. I frame myself as a senior full-stack engineer who partners with data science teams on feature integration—honest about adjacent AI depth, not claiming ML platform ownership. Freelance and client-facing work taught me to move from ambiguous requirements to architecture, tests, security, and performance without waiting for perfect specs.\n\nI am Melbourne-based with full Australian working rights and actively open to relocate for your hybrid Sydney role. I am available to discuss start timing and hybrid cadence soon. I would welcome a conversation about how your engineering squads partner with data science and which client verticals this team serves most. Thank you for considering my application.\n\nMuhammad Ahmad Naeem",
+  "recruiterMessage": "",
+  "customQuestionsInput": "",
+  "customQa": []
+}
