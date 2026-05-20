@@ -2,6 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 import { basenameOnly, findArtifactForReport } from '@/lib/artifacts-for-report';
+import { normalizeStatus } from '@/lib/normalize-tracker-status';
+
+/** Re-export for callers that already imported from `applications-parser`. */
+export { normalizeStatus };
 
 export type CareerApplication = {
   number: number;
@@ -55,42 +59,6 @@ export function resolveApplicationsMdPath(root: string): string | null {
     if (fs.existsSync(p)) return p;
   }
   return null;
-}
-
-export function normalizeStatus(raw: string): string {
-  let s = raw.replace(/\*\*/g, '').trim().toLowerCase();
-  const dateIdx = s.search(/\s202\d/);
-  if (dateIdx > 0) s = s.slice(0, dateIdx).trim();
-
-  if (s.includes('no aplicar') || s.includes('no_aplicar') || s === 'skip' || s.includes('geo blocker'))
-    return 'skip';
-  if (s.includes('interview') || s.includes('entrevista')) return 'interview';
-  if (s === 'offer' || s.includes('oferta')) return 'offer';
-  if (s.includes('responded') || s.includes('respondido')) return 'responded';
-  if (s.includes('applied') || s.includes('aplicado') || s === 'enviada' || s === 'aplicada' || s === 'sent')
-    return 'applied';
-  if (s.includes('rejected') || s.includes('rechazado') || s === 'rechazada') return 'rejected';
-  if (
-    s.includes('discarded') ||
-    s.includes('descartado') ||
-    s === 'descartada' ||
-    s === 'cerrada' ||
-    s === 'cancelada' ||
-    s.startsWith('duplicado') ||
-    s.startsWith('dup')
-  )
-    return 'discarded';
-  if (
-    s.includes('evaluated') ||
-    s.includes('evaluada') ||
-    s === 'condicional' ||
-    s === 'hold' ||
-    s === 'monitor' ||
-    s === 'evaluar' ||
-    s === 'verificar'
-  )
-    return 'evaluated';
-  return s;
 }
 
 function normalizeCompany(name: string): string {

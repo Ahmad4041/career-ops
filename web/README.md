@@ -19,7 +19,7 @@ Small **Next.js** UI on top of your local career-ops repo: tracker + reports, **
 | **`GET /api/pdf/lookup?reportPath=reports/…md`** | JSON: whether `output/` contains a PDF matched to that report slug |
 | **`GET /api/pdf/download?reportPath=reports/…md`** | Stream matched PDF or 404 |
 | **`GET /api/pdf/templates`** | Lists `templates/*.html` for the PDF picker |
-| **`POST /api/pdf/generate-from-template`** | Runs `render-cv-html-from-template.mjs` + `generate-pdf.mjs` (Playwright); body: `{ "templatePath", "format?", "reportPath?", "outputSlug?" }`; returns **`GET /api/pdf/download-rendered?name=…`** URL |
+| **`POST /api/pdf/generate-from-template`** | Runs `render-cv-html-from-template.mjs`, then (unless `"renderOnly": true`) `generate-pdf.mjs` (Playwright). Body: `{ "templatePath", "format?", "reportPath?", "outputSlug?", "renderOnly"?: false }`. **HTML-only:** `renderOnly: true` writes **`output/cv-*.html`** for preview/matching — no Playwright. Full pipeline returns **`GET /api/pdf/download-rendered?name=…`** URL |
 | **`GET /api/cv/assets?reportPath=reports/…md`** | JSON: best HTML / PDF / .tex filenames in **`output/`** for that report slug + **`/api/output/file`** URLs |
 | **`GET /api/output/file?name=…`** | Serves **`output/*.pdf`**, **`*.html`**, **`*.tex`**; add **`inline=1`** when embedding PDF in an iframe |
 | **`POST /api/tex/generate-from-template`** | `render-cv-tex-from-template.mjs` + `generate-latex.mjs` (tectonic / pdflatex on PATH); writes **`output/cv-…`** `.tex`; returns PDF URLs only when compilation succeeds |
@@ -84,6 +84,12 @@ npm run dev
 
 Open [http://localhost:3100](http://localhost:3100).
 
+Unit tests for tracker query helpers (Vitest):
+
+```bash
+npm run test
+```
+
 ### Verify Cursor Agent CLI (no dashboard)
 
 From `web/`:
@@ -115,7 +121,7 @@ Lines like `cursor-retrieval: tracing to '…/cursor_retrieval….log'` come fro
 
 ## UX roadmap
 
-See **`UX-ROADMAP.md`** for planned dashboard improvements (applications table filters, sorting, design polish). Agent guidance for UI work lives in **`.cursor/skills/career-ops-frontend/SKILL.md`**.
+See **`UX-ROADMAP.md`** for dashboard UX notes. Applications filters and sort sync to the URL (`q`, `status`, `sort`, `dir`) for bookmarks and sharing. Agent guidance: **`.cursor/skills/career-ops-frontend/SKILL.md`**.
 
 ## Security
 

@@ -8,17 +8,19 @@ Prioritized plans for the Next.js dashboard (`web/`). Aligns with current code: 
 
 | Area | What exists | Gap |
 |------|-------------|-----|
-| **Applications table** | Columns: #, Company, Role, Score, Status, PDF, CV artifacts (H/P/T), Report #, Posting link | No **search**, no **status filter**, no **user-controlled sort** (only implicit sort by score ↓) |
-| **Sorting** | `[...data.applications].sort((a,b) => b.score - a.score)` | Cannot sort by date, company, status; **tie-breaking** undefined when scores equal |
-| **Metrics** | Total, avg/top score, PDF count, “actionable”, “by status” chips | Chips are **display-only** — clicking a status does **not** filter the table |
+| **Applications table** | Columns: #, **Date**, Company, Role, Score, Status, PDF, CV, Report, Posting | Search + status filter + column sort implemented (`applications-table-query.ts`) |
+| **Sorting** | User-controlled via headers; default score ↓ | — |
+| **Metrics** | Total, avg/top score, PDF count, “actionable”, “by status” chips | Chips **toggle** filter for that normalized status (click again to clear) |
 | **Mobile / narrow** | `min-w-[960px]` table + horizontal scroll | Filters will need to sit **above** the table; consider stacked layout |
-| **Design tokens** | `tailwind.config.ts`: surface, muted, accent, row, border; minimal `:root` in `globals.css` | No semantic tokens for **success/warning/danger** rows; emoji PDF column may not match rest of UI |
-| **Accessibility** | Rows use `role="button"` + click | **aria-sort** missing; header cells not wired as sort buttons; keyboard-only flow for table is weak |
+| **Design tokens** | `tailwind.config.ts`: surface, muted, accent, row, border; minimal `:root` in `globals.css` | No semantic tokens for **success/warning/danger** rows; PDF column uses icon + `aria-label` (not emoji text) |
+| **Accessibility** | Sortable `<th>` use `aria-sort` when active; row open on Enter; **Escape** closes modals (`useEscapeClose`); dialogs use `aria-modal` | Full keyboard sort nav / roving tabindex still optional |
 | **Settings** | Split HTML preview, LaTeX PDF compile | Already stronger than main table UX |
 
 ---
 
 ## 2. Phase A — Table filtering & search (high impact)
+
+**Status:** **A1–A5 implemented** — query params **`q`**, **`status`**, **`sort`**, **`dir`** sync with `router.replace` (bookmarkable). Default sort (`score`/`desc`) is omitted from the URL to keep links short.
 
 **Goal:** Find rows quickly without leaving the dashboard.
 
@@ -28,13 +30,15 @@ Prioritized plans for the Next.js dashboard (`web/`). Aligns with current code: 
 | **A2. Status filter** | Multi-select or dropdown of canonical statuses (reuse `lib/tracker-states.ts` / same strings as `data/applications.md`). Optional “All”. |
 | **A3. Wire metrics chips** | Clicking a “By status” chip sets the status filter to that value (and scrolls to table). |
 | **A4. Clear filters** | One control resets search + status. |
-| **A5. URL sync (optional)** | `?q=&status=` so refresh/share bookmark preserves view — nice-to-have after A1–A4. |
+| **A5. URL sync** | `?q=&status=&sort=&dir=` — see `web/lib/applications-url-query.ts`; dashboard wrapped in `<Suspense>` for `useSearchParams`. |
 
-**Implementation notes:** Derive a `filteredApplications` memo from `data.applications` + filter state; **keep sort** as a separate memo applied after filter.
+**Implementation notes:** `web/lib/applications-table-query.ts` — filter uses `normalizeStatus()` for status keys (matches metrics chips). Sort runs after filter.
 
 ---
 
 ## 3. Phase B — Sorting (high impact)
+
+**Status:** **B1–B5 implemented** — sortable headers for `#`, Date, Company, Role, Score, Status; default **score · desc**; ties break by **# ascending** (see toolbar hint).
 
 **Goal:** User chooses column and direction; stable ties.
 
@@ -49,6 +53,8 @@ Prioritized plans for the Next.js dashboard (`web/`). Aligns with current code: 
 ---
 
 ## 4. Phase C — Design & visual polish
+
+**Status:** **C1–C7 done** — **Comfortable / Compact** row density (`web/lib/table-density.ts`, persisted as `localStorage` key `careerOpsTableDensity`). Same polish as before (`tracker-status-badge.tsx`, aligned score, Output column, hostnames).
 
 **Goal:** Cohesive, scannable, professional — without redesigning everything at once.
 
@@ -66,16 +72,20 @@ Prioritized plans for the Next.js dashboard (`web/`). Aligns with current code: 
 
 ## 5. Phase D — Structure & maintainability
 
+**Status:** **D1–D3 largely done** — `ApplicationsTable`, `ApplicationsToolbar`, `ApplicationsStatusChips`, `SortHeader`; shared types in `web/types/dashboard.ts` (`AppRow`, `TrackerPayload`); helpers in `tracker-table-helpers.ts`.
+
 | Task | Detail |
 |------|--------|
 | **D1. Extract `ApplicationsTable`** | Props: rows, sort, onSortChange, filters, onRowOpen. |
 | **D2. Extract `ApplicationsToolbar`** | Search + status + clear. |
 | **D3. Types** | Move `AppRow`, `Payload` to `web/types/dashboard.ts` if imported from more than one file. |
-| **D4. Tests (optional)** | Pure functions: `filterApplications`, `sortApplications` — easy unit tests without React. |
+| **D4. Tests (optional)** | **Done** — `web/lib/applications-table-query.test.ts` (`npm run test` in `web/`). |
 
 ---
 
 ## 6. Phase E — Performance & scale
+
+**Status:** **E1–E2 done** — `@tanstack/react-virtual` in `applications-table.tsx`; scroll container `max-h-[min(70vh,640px)]`; fixed row height (~54px comfortable / ~42px compact). Spacer rows above/below visible window. **`ApplicationDetailModal`**, **`ReportViewerModal`**, and **`QueueJobModal`** are loaded with **`next/dynamic`** in `web/app/page.tsx` (type-only import for `AppRowLite`).
 
 | Task | Detail |
 |------|--------|
@@ -86,11 +96,7 @@ Prioritized plans for the Next.js dashboard (`web/`). Aligns with current code: 
 
 ## 7. Suggested order of execution
 
-1. **B + A together** — sort + filter compose cleanly (filtered → sorted).
-2. **C1–C4** — quick wins once behavior is stable.
-3. **Chip wiring (A3)** — bridges metrics and table.
-4. **D** — refactor when behavior stops shifting.
-5. **E** — when real data grows.
+1. **Done:** **A–E** (including virtualization, lazy modals, Vitest for query helpers).
 
 ---
 

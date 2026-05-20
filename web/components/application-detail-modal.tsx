@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { TRACKER_STATUS_LABELS } from '@/lib/tracker-states';
+import { useEscapeClose } from '@/lib/use-escape-close';
 
 export type AppRowLite = {
   number: number;
@@ -74,6 +75,7 @@ export function ApplicationDetailModal({
   const [templatePathPick, setTemplatePathPick] = useState('templates/cv-template.html');
   const [pdfFormatPick, setPdfFormatPick] = useState<'a4' | 'letter'>('a4');
   const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [renderHtmlBusy, setRenderHtmlBusy] = useState(false);
   const [pdfGenErr, setPdfGenErr] = useState<string | null>(null);
   const [texGenerating, setTexGenerating] = useState(false);
   const [texGenErr, setTexGenErr] = useState<string | null>(null);
@@ -125,29 +127,66 @@ export function ApplicationDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- row keyed by primitives
   }, [open, row?.number, row?.reportPath, fetchArtifactsForRow]);
 
+  const refreshPdfTemplates = useCallback(async () => {
+    try {
+      const res = await fetch('/api/pdf/templates', { cache: 'no-store' });
+      const j = (await res.json()) as { templates?: PdfTpl[] };
+      const list = Array.isArray(j.templates) ? j.templates : [];
+      setPdfTemplates(list);
+      if (list.length > 0) {
+        setTemplatePathPick((prev) =>
+          list.some((t) => t.relativePath === prev) ? prev : list[0]!.relativePath,
+        );
+      }
+    } catch {
+      setPdfTemplates([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
-    async function loadTemplates() {
-      try {
-        const res = await fetch('/api/pdf/templates', { cache: 'no-store' });
-        const j = (await res.json()) as { templates?: PdfTpl[] };
-        if (cancelled) return;
-        const list = Array.isArray(j.templates) ? j.templates : [];
-        setPdfTemplates(list);
-        if (!cancelled && list.length > 0) {
-          const hasDefault = list.some((t) => t.relativePath === 'templates/cv-template.html');
-          setTemplatePathPick(hasDefault ? 'templates/cv-template.html' : list[0].relativePath);
-        }
-      } catch {
-        if (!cancelled) setPdfTemplates([]);
+    void refreshPdfTemplates();
+  }, [open, refreshPdfTemplates]);
+
+  const handleRenderHtmlOnly = useCallback(async () => {
+    setRenderHtmlBusy(true);
+    setPdfGenErr(null);
+    try {
+      const body: Record<string, unknown> = {
+        templatePath: templatePathPick,
+        format: pdfFormatPick,
+        renderOnly: true,
+      };
+      if (row?.reportPath) body.reportPath = row.reportPath;
+      if (candidateSlug?.trim()) body.outputSlug = candidateSlug.trim();
+
+      const res = await fetch('/api/pdf/generate-from-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        downloadUrl?: string;
+        phases?: { step?: string; stderr?: string }[];
+      };
+
+      if (!res.ok || !j.ok) {
+        const tail = j.phases
+          ?.map((p) => (p.stderr ? `${p.step}: ${p.stderr.slice(-400)}` : ''))
+          .filter(Boolean)
+          .join(' | ');
+        throw new Error(j.error || tail || `HTTP ${res.status}`);
       }
+
+      await fetchArtifactsForRow();
+    } catch (e) {
+      setPdfGenErr(e instanceof Error ? e.message : 'Render HTML failed');
+    } finally {
+      setRenderHtmlBusy(false);
     }
-    void loadTemplates();
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+  }, [templatePathPick, pdfFormatPick, row?.reportPath, candidateSlug, fetchArtifactsForRow]);
 
   const handleGeneratePdfFromTemplate = useCallback(async () => {
     setPdfGenerating(true);
@@ -271,16 +310,19 @@ export function ApplicationDetailModal({
     }
   }, [row, careerOpsRoot, candidateSlug]);
 
+  useEscapeClose(Boolean(open && row), onClose);
+
   if (!open || !row) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/70 p-4"
       role="presentation"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface p-5 shadow-2xl"
         role="dialog"
+        aria-modal="true"
         aria-label="Application">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -368,6 +410,7 @@ export function ApplicationDetailModal({
                     <iframe
                       title="Tailored CV PDF preview"
                       src={artifacts.pdf.urlInline}
+                      loading="lazy"
                       className="mt-2 h-[22rem] w-full rounded-lg border border-border bg-black"
                     />
                   ) : (
@@ -404,9 +447,12 @@ export function ApplicationDetailModal({
           <div className="rounded-lg border border-border/80 bg-row/50 p-3 text-xs text-muted">
             <p className="font-medium text-white">Tailored CV PDF (HTML → Playwright)</p>
             <p className="mt-1">
-              PDFs are produced with <code className="text-accent">render-cv-html-from-template.mjs</code> →{' '}
-              <code className="text-accent">generate-pdf.mjs</code> (Playwright). Add any{' '}
-              <code className="text-muted">templates/*.html</code> locally; minimal layouts can use{' '}
+              After you edit <code className="text-muted">templates/*.html</code>, use{' '}
+              <strong className="text-white">Refresh list</strong> so new files appear, then{' '}
+              <strong className="text-white">Render HTML</strong> (fast, writes <code className="text-accent">output/</code>) or{' '}
+              <strong className="text-white">Generate PDF</strong> (Playwright). Pipeline:{' '}
+              <code className="text-accent">render-cv-html-from-template.mjs</code> →{' '}
+              <code className="text-accent">generate-pdf.mjs</code>. Minimal templates can use{' '}
               <code className="text-muted">{`{{CONTENT_HTML}}`}</code>.
             </p>
 
@@ -420,7 +466,7 @@ export function ApplicationDetailModal({
                       : pdfTemplates[0]?.relativePath ?? templatePathPick
                   }
                   onChange={(e) => setTemplatePathPick(e.target.value)}
-                  disabled={pdfTemplates.length === 0 || pdfGenerating}
+                  disabled={pdfTemplates.length === 0 || pdfGenerating || renderHtmlBusy}
                   className="mt-1 w-full rounded border border-border bg-row px-2 py-1.5 font-mono text-[11px] text-white">
                   {pdfTemplates.length === 0 ? (
                     <option value={templatePathPick}>No templates/*.html — add under templates/</option>
@@ -438,7 +484,7 @@ export function ApplicationDetailModal({
                 <select
                   value={pdfFormatPick}
                   onChange={(e) => setPdfFormatPick(e.target.value === 'letter' ? 'letter' : 'a4')}
-                  disabled={pdfGenerating}
+                  disabled={pdfGenerating || renderHtmlBusy}
                   className="mt-1 block rounded border border-border bg-row px-2 py-1.5 font-mono text-[11px] text-white">
                   <option value="a4">A4</option>
                   <option value="letter">US Letter</option>
@@ -446,7 +492,21 @@ export function ApplicationDetailModal({
               </label>
               <button
                 type="button"
-                disabled={pdfGenerating || pdfTemplates.length === 0}
+                disabled={pdfGenerating || renderHtmlBusy}
+                onClick={() => void refreshPdfTemplates()}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-white hover:border-accent/60 disabled:opacity-50">
+                Refresh list
+              </button>
+              <button
+                type="button"
+                disabled={renderHtmlBusy || pdfGenerating || pdfTemplates.length === 0}
+                onClick={() => void handleRenderHtmlOnly()}
+                className="rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/20 disabled:opacity-50">
+                {renderHtmlBusy ? 'Rendering…' : 'Render HTML'}
+              </button>
+              <button
+                type="button"
+                disabled={pdfGenerating || renderHtmlBusy || pdfTemplates.length === 0}
                 onClick={() => void handleGeneratePdfFromTemplate()}
                 className="rounded-lg bg-accent/90 px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-50 hover:bg-accent">
                 {pdfGenerating ? 'Generating…' : 'Generate PDF'}

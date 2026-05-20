@@ -38,7 +38,9 @@ description: >-
 
 ## Tables (Applications tracker)
 
-**Current behavior** (verify in `web/app/page.tsx`): rows sort **only** by score descending; no column sort, no text filter, no status filter.
+**Behavior** (see `applications-table-query.ts`, `applications-url-query.ts`, `app/page.tsx`): debounced text search (company, role, notes), status filter (dropdown + **By status** chips), column sort with `aria-sort`, URL sync (`q`, `status`, `sort`, `dir`) via `useSearchParams` + `router.replace`, empty state when no matches. While the search box is ahead of the debounced value, only status/sort hydrate from the URL (avoids clobbering typing).
+
+**Visuals:** status chips + table column use **`tracker-status-badge.tsx`** (`TrackerStatusBadge`, `trackerStatusToneClass`) — keep tones muted and WCAG-friendly; posting links show hostname (`tracker-table-helpers.ts`). Table UI lives in **`applications-table.tsx`** (virtualized tbody via **`@tanstack/react-virtual`** + **`applications-table-row.tsx`**), **`applications-toolbar.tsx`**, **`applications-status-chips.tsx`**; density uses **`table-density.ts`** (`Comfortable` / `Compact`, localStorage). Query logic tests: **`npm run test`** → `lib/applications-table-query.test.ts`.
 
 When extending tables:
 
@@ -58,7 +60,7 @@ When extending tables:
 ## Component hygiene
 
 - **Extract** from `page.tsx` when a block exceeds ~80 lines or repeats: `ApplicationsTable`, `MetricsStrip`, `MainTabs`, etc. Keep API types (`AppRow`, `Payload`) in `web/types/` if shared.
-- **Modals** (`application-detail-modal`, `report-viewer-modal`): portal-like fixed overlay; preserve `Escape` / backdrop close behavior.
+- **Modals** (`application-detail-modal`, `report-viewer-modal`, `queue-job-modal`): fixed overlay, backdrop click + **`Escape`** (`web/lib/use-escape-close.ts`), `aria-modal` on the dialog panel; avoid full-screen **`backdrop-blur`** (scroll jank).
 
 ## Anti-patterns
 

@@ -202,6 +202,15 @@ This file accumulates your best interview stories over time. Each evaluation (Bl
 **Reflection:** I would standardize **trace/correlation IDs** and **logging shape** across JVM and Node paths earlier to shorten MTTR.  
 **Best for questions about:** microservices; polyglot teams; API boundaries; integration risk  
 
+### [E‑commerce / Web UX] Cruise booking surfaces — performance, devices, commerce journeys
+**Source:** Report #018 — Salon Tech Co Pty Ltd — eCommerce Developer (Shopify)  
+**S (Situation):** Travel commerce required **responsive** booking experiences across devices with **payments-adjacent** flows and a lot of moving UI surfaces.  
+**T (Task):** Keep customer journeys reliable while iterating on **high-traffic** pages and integrated modules.  
+**A (Action):** Delivered **React**-era SPAs and integrations with disciplined **testing** and **ops visibility** habits called out on the résumé.  
+**R (Result):** Credible narrative for **conversion-minded** front-end work — do **not** claim Shopify/Liquid metrics you cannot verify.  
+**Reflection:** If targeting **Shopify**, I would ship **one public** theme customization or app integration write-up so panels can probe **Liquid** depth honestly.  
+**Best for questions about:** high-traffic UI; cross-browser reliability; booking/commerce parallels to PDP/checkout thinking  
+
 <!-- Stories will be added here as you evaluate offers -->
 <!-- Format:
 ### [Theme] Story Title

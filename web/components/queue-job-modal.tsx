@@ -1,5 +1,7 @@
 'use client';
 
+import { useEscapeClose } from '@/lib/use-escape-close';
+
 import type { JobSummary } from '@/types/jobs';
 
 type Props = {
@@ -9,16 +11,19 @@ type Props = {
 };
 
 export function QueueJobModal({ job, onClose, onFocusStream }: Props) {
+  useEscapeClose(Boolean(job), onClose);
+
   if (!job) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[52] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[52] flex items-center justify-center bg-black/65 p-4"
       role="presentation"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl"
         role="dialog"
+        aria-modal="true"
         aria-label="Queued job">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">

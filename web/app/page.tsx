@@ -1,46 +1,37 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-import { ApplicationDetailModal } from '@/components/application-detail-modal';
-import { QueueJobModal } from '@/components/queue-job-modal';
-import { ReportViewerModal } from '@/components/report-viewer-modal';
+import {
+  defaultSortDirForKey,
+  filterThenSort,
+  type SortDir,
+  type SortKey,
+} from '@/lib/applications-table-query';
+import { buildTableQueryString, parseTableQueryFromUrl } from '@/lib/applications-url-query';
+import { loadTableDensity, saveTableDensity, type TableDensity } from '@/lib/table-density';
+import { ApplicationsStatusChips } from '@/components/applications-status-chips';
+import { ApplicationsTable } from '@/components/applications-table';
+import { ApplicationsToolbar } from '@/components/applications-toolbar';
+import type { AppRowLite } from '@/components/application-detail-modal';
 import type { JobSummary } from '@/types/jobs';
+import type { AppRow, TrackerPayload as Payload } from '@/types/dashboard';
 
-type AppRow = {
-  number: number;
-  date: string;
-  company: string;
-  role: string;
-  status: string;
-  score: number;
-  scoreRaw: string;
-  hasPdf: boolean;
-  reportPath: string;
-  reportNumber: string;
-  notes: string;
-  jobUrl: string;
-  linkedPdfBasename: string | null;
-  linkedHtmlBasename: string | null;
-  linkedTexBasename: string | null;
-};
-
-type Payload = {
-  careerOpsRoot: string;
-  trackerPath: string | null;
-  candidateSlug: string | null;
-  metrics: {
-    total: number;
-    byStatus: Record<string, number>;
-    avgScore: number;
-    topScore: number;
-    withPdf: number;
-    actionable: number;
-  };
-  applications: AppRow[];
-  error?: string;
-};
+const ApplicationDetailModal = dynamic(
+  () => import('@/components/application-detail-modal').then((m) => m.ApplicationDetailModal),
+  { loading: () => null },
+);
+const QueueJobModal = dynamic(
+  () => import('@/components/queue-job-modal').then((m) => m.QueueJobModal),
+  { loading: () => null },
+);
+const ReportViewerModal = dynamic(
+  () => import('@/components/report-viewer-modal').then((m) => m.ReportViewerModal),
+  { loading: () => null },
+);
 
 type RunResult = {
   ok: boolean;
@@ -266,7 +257,7 @@ function NavBtn({
   );
 }
 
-export default function DashboardPage() {
+function DashboardPageInner() {
   const [data, setData] = useState<Payload | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -291,8 +282,113 @@ export default function DashboardPage() {
   const [gitSyncLog, setGitSyncLog] = useState<string | null>(null);
   const [selectedApp, setSelectedApp] = useState<AppRow | null>(null);
   const [inspectJob, setInspectJob] = useState<JobSummary | null>(null);
+  const [filterSearch, setFilterSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('score');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [tableDensity, setTableDensity] = useState<TableDensity>('comfortable');
+  const applicationsTableRef = useRef<HTMLElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const logViewportRef = useRef<HTMLPreElement | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tableUrlReadyRef = useRef(false);
+
+  useEffect(() => {
+    setTableDensity(loadTableDensity());
+  }, []);
+
+  const handleDensityChange = useCallback((d: TableDensity) => {
+    setTableDensity(d);
+    saveTableDensity(d);
+  }, []);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(filterSearch), 280);
+    return () => window.clearTimeout(t);
+  }, [filterSearch]);
+
+  const clearApplicationFilters = useCallback(() => {
+    setFilterSearch('');
+    setDebouncedSearch('');
+    setStatusFilter('');
+  }, []);
+
+  /** Hydrate from URL on load; apply browser navigation when URL diverges from derived query string. */
+  useEffect(() => {
+    const qs = searchParams.toString();
+    if (!tableUrlReadyRef.current) {
+      const p = parseTableQueryFromUrl(searchParams);
+      setFilterSearch(p.q);
+      setDebouncedSearch(p.q);
+      setStatusFilter(p.status);
+      setSortKey(p.sortKey);
+      setSortDir(p.sortDir);
+      tableUrlReadyRef.current = true;
+      return;
+    }
+
+    const built = buildTableQueryString({
+      q: debouncedSearch,
+      status: statusFilter,
+      sortKey,
+      sortDir,
+    });
+    if (qs === built) return;
+
+    const p = parseTableQueryFromUrl(searchParams);
+
+    if (filterSearch !== debouncedSearch) {
+      setStatusFilter(p.status);
+      setSortKey(p.sortKey);
+      setSortDir(p.sortDir);
+      return;
+    }
+
+    setFilterSearch(p.q);
+    setDebouncedSearch(p.q);
+    setStatusFilter(p.status);
+    setSortKey(p.sortKey);
+    setSortDir(p.sortDir);
+    // deps: [searchParams] only — react to URL changes (including replace/back), not to local edits before replace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  /** Push filter/sort state into the address bar (bookmarkable). */
+  useEffect(() => {
+    if (!tableUrlReadyRef.current) return;
+    const built = buildTableQueryString({
+      q: debouncedSearch,
+      status: statusFilter,
+      sortKey,
+      sortDir,
+    });
+    if (built === searchParams.toString()) return;
+    router.replace(built ? `${pathname}?${built}` : pathname, { scroll: false });
+  }, [debouncedSearch, statusFilter, sortKey, sortDir, pathname, router, searchParams]);
+
+  const onSortHeaderClick = useCallback((key: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        return prev;
+      }
+      setSortDir(defaultSortDirForKey(key));
+      return key;
+    });
+  }, []);
+
+  const displayApplications = useMemo(() => {
+    if (!data?.applications?.length) return [];
+    return filterThenSort(data.applications, {
+      search: debouncedSearch,
+      statusNormalized: statusFilter,
+      sortKey,
+      sortDir,
+    });
+  }, [data?.applications, debouncedSearch, statusFilter, sortKey, sortDir]);
 
   const load = useCallback(async () => {
     setLoadErr(null);
@@ -308,6 +404,51 @@ export default function DashboardPage() {
       setRefreshing(false);
     }
   }, []);
+
+  const closeApplicationModal = useCallback(() => setSelectedApp(null), []);
+
+  const applicationModalRow = useMemo<AppRowLite | null>(() => {
+    if (!selectedApp) return null;
+    return {
+      number: selectedApp.number,
+      date: selectedApp.date,
+      company: selectedApp.company,
+      role: selectedApp.role,
+      status: selectedApp.status,
+      scoreRaw: selectedApp.scoreRaw,
+      hasPdf: selectedApp.hasPdf,
+      linkedPdfBasename: selectedApp.linkedPdfBasename,
+      linkedHtmlBasename: selectedApp.linkedHtmlBasename,
+      linkedTexBasename: selectedApp.linkedTexBasename,
+      reportPath: selectedApp.reportPath,
+      reportNumber: selectedApp.reportNumber,
+      notes: selectedApp.notes,
+      jobUrl: selectedApp.jobUrl,
+    };
+  }, [selectedApp]);
+
+  const onApplicationSaved = useCallback(() => void load(), [load]);
+
+  const openReport = useCallback(
+    async (reportPath: string, title: string) => {
+      try {
+        const res = await fetch(apiReportHref(reportPath));
+        const json = (await res.json()) as { markdown?: string; error?: string };
+        if (!res.ok) throw new Error(json.error || res.statusText);
+        setPreview({ title, markdown: json.markdown ?? '' });
+      } catch (e) {
+        setRunOutput({
+          ok: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: e instanceof Error ? e.message : 'Open failed',
+          careerOpsRoot: data?.careerOpsRoot ?? '',
+        });
+        setMainTab('output');
+      }
+    },
+    [data?.careerOpsRoot],
+  );
 
   useEffect(() => {
     void load();
@@ -663,24 +804,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function openReport(reportPath: string, title: string) {
-    try {
-      const res = await fetch(apiReportHref(reportPath));
-      const json = (await res.json()) as { markdown?: string; error?: string };
-      if (!res.ok) throw new Error(json.error || res.statusText);
-      setPreview({ title, markdown: json.markdown ?? '' });
-    } catch (e) {
-      setRunOutput({
-        ok: false,
-        exitCode: 1,
-        stdout: '',
-        stderr: e instanceof Error ? e.message : 'Open failed',
-        careerOpsRoot: data?.careerOpsRoot ?? '',
-      });
-      setMainTab('output');
-    }
-  }
-
   async function runCmd(cmd: string) {
     if (cmd === 'batch-runner') {
       const okConfirm =
@@ -880,93 +1003,40 @@ export default function DashboardPage() {
                 <Stat label="Active (approx.)" value={String(data.metrics.actionable)} />
               </section>
 
-              <section className="mb-6">
-                <h2 className="mb-3 text-sm font-medium text-muted">By status</h2>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(data.metrics.byStatus)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([status, count]) => (
-                      <span key={status} className="rounded-full border border-border bg-row px-3 py-1 text-sm text-muted">
-                        <span className="capitalize text-white">{status}</span> · {count}
-                      </span>
-                    ))}
-                </div>
-              </section>
+              <ApplicationsStatusChips
+                byStatus={data.metrics.byStatus}
+                statusFilter={statusFilter}
+                onToggleStatus={(s) =>
+                  setStatusFilter((f) => (f === s ? '' : s))
+                }
+                scrollAnchorRef={applicationsTableRef}
+              />
 
-              <section className="overflow-hidden rounded-xl border border-border">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[960px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-row/80 text-xs uppercase tracking-wide text-muted">
-                        <th className="px-3 py-2">#</th>
-                        <th className="px-3 py-2">Company</th>
-                        <th className="px-3 py-2">Role</th>
-                        <th className="px-3 py-2">Score</th>
-                        <th className="px-3 py-2">Status</th>
-                        <th className="px-3 py-2">PDF</th>
-                        <th title="Matched files in output/: H=HTML, P=PDF, T=LaTeX" className="px-3 py-2">
-                          CV
-                        </th>
-                        <th className="px-3 py-2">Report</th>
-                        <th className="px-3 py-2">Posting</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...data.applications]
-                        .sort((a, b) => (b.score || 0) - (a.score || 0))
-                        .map((row) => (
-                          <tr
-                            key={`${row.number}-${row.company}`}
-                            tabIndex={0}
-                            role="button"
-                            onClick={() => setSelectedApp(row)}
-                            onKeyDown={(ev) =>
-                              ev.key === 'Enter' && setSelectedApp(row)
-                            }
-                            className="cursor-pointer border-b border-border/80 hover:bg-row/60">
-                            <td className="px-3 py-2 font-mono text-xs text-muted">{row.number}</td>
-                            <td className="px-3 py-2 font-medium text-white">{row.company}</td>
-                            <td className="max-w-[200px] px-3 py-2 text-muted">{row.role}</td>
-                            <td className="px-3 py-2 font-mono text-accent">{row.scoreRaw || '—'}</td>
-                            <td className="px-3 py-2 capitalize">{row.status}</td>
-                            <td className="px-3 py-2">{row.hasPdf ? '✅' : '❌'}</td>
-                            <td className="px-3 py-2 font-mono text-[11px] text-muted">
-                              {[
-                                row.linkedHtmlBasename ? 'H' : '·',
-                                row.linkedPdfBasename || row.hasPdf ? 'P' : '·',
-                                row.linkedTexBasename ? 'T' : '·',
-                              ].join(' ')}
-                            </td>
-                            <td className="px-3 py-2">
-                              {row.reportPath ? (
-                                <span className="text-accent">#{row.reportNumber || row.number}</span>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                            <td className="max-w-[120px] truncate px-3 py-2">
-                              {row.jobUrl ? (
-                                <span
-                                  className="text-accent"
-                                  role="presentation"
-                                  onClick={(ev) => ev.stopPropagation()}>
-                                  <a href={row.jobUrl} target="_blank" rel="noopener noreferrer">
-                                    Link
-                                  </a>
-                                </span>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="border-t border-border px-3 py-2 text-xs text-muted">
-                  Click any row for status, PDF, and report controls.
-                </p>
-              </section>
+              <ApplicationsToolbar
+                anchorRef={applicationsTableRef}
+                filterSearch={filterSearch}
+                onFilterSearchChange={setFilterSearch}
+                statusFilter={statusFilter}
+                onStatusFilterChange={setStatusFilter}
+                byStatus={data.metrics.byStatus}
+                onClearFilters={clearApplicationFilters}
+                showingCount={displayApplications.length}
+                totalCount={data.applications.length}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                density={tableDensity}
+                onDensityChange={handleDensityChange}
+              />
+
+              <ApplicationsTable
+                rows={displayApplications}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSortHeaderClick}
+                onRowOpen={setSelectedApp}
+                onClearFilters={clearApplicationFilters}
+                density={tableDensity}
+              />
             </>
           )}
         </div>
@@ -1156,31 +1226,12 @@ export default function DashboardPage() {
 
       <ApplicationDetailModal
         open={Boolean(selectedApp)}
-        row={
-          selectedApp
-            ? {
-                number: selectedApp.number,
-                date: selectedApp.date,
-                company: selectedApp.company,
-                role: selectedApp.role,
-                status: selectedApp.status,
-                scoreRaw: selectedApp.scoreRaw,
-                hasPdf: selectedApp.hasPdf,
-                linkedPdfBasename: selectedApp.linkedPdfBasename,
-                linkedHtmlBasename: selectedApp.linkedHtmlBasename,
-                linkedTexBasename: selectedApp.linkedTexBasename,
-                reportPath: selectedApp.reportPath,
-                reportNumber: selectedApp.reportNumber,
-                notes: selectedApp.notes,
-                jobUrl: selectedApp.jobUrl,
-              }
-            : null
-        }
+        row={applicationModalRow}
         careerOpsRoot={data?.careerOpsRoot ?? ''}
         candidateSlug={data?.candidateSlug ?? null}
-        onClose={() => setSelectedApp(null)}
-        onSaved={() => void load()}
-        onViewReport={(path, title) => void openReport(path, title)}
+        onClose={closeApplicationModal}
+        onSaved={onApplicationSaved}
+        onViewReport={openReport}
       />
 
       <QueueJobModal
@@ -1196,6 +1247,20 @@ export default function DashboardPage() {
         onClose={() => setPreview(null)}
       />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[100dvh] flex-col items-center justify-center gap-2 bg-surface px-4 text-center text-muted">
+          <p className="text-sm text-white">Loading dashboard…</p>
+          <p className="max-w-sm text-xs">Reading Applications URL state — requires JavaScript.</p>
+        </div>
+      }>
+      <DashboardPageInner />
+    </Suspense>
   );
 }
 

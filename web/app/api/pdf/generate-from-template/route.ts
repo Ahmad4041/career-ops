@@ -62,6 +62,8 @@ export async function POST(request: Request) {
     reportStem = path.basename(reportPathRaw, '.md');
   }
 
+  const renderOnly = Boolean(o.renderOnly);
+
   const profileSlug = readCandidateSlugFromProfile(root);
   const slugFromBody = typeof o.outputSlug === 'string' ? sanitizeFileStem(o.outputSlug) : '';
   const slugPart =
@@ -88,6 +90,60 @@ export async function POST(request: Request) {
   const phases: { step: string; code: number; stderr: string; stdout: string }[] = [];
 
   try {
+    if (renderOnly) {
+      const htmlName = sanitizeFileStem(`cv-${stamp}`) + '.html';
+      const htmlAbs = path.join(outDir, htmlName);
+      const htmlRel = path.posix.join('output', htmlName);
+      const r1 = await runWithTimeout(
+        process.execPath,
+        [renderScript, `--format=${format}`, `--root=${root}`, tpl, htmlRel],
+        {
+          cwd: root,
+          env: process.env,
+          timeoutMs: RENDER_TIMEOUT_MS,
+          shell: false,
+        },
+      );
+      phases.push({
+        step: 'render-html',
+        code: r1.code,
+        stderr: r1.stderr.slice(-8000),
+        stdout: r1.stdout.slice(-8000),
+      });
+      if (r1.code !== 0) {
+        return Response.json(
+          {
+            ok: false,
+            error: 'render-cv-html-from-template.mjs failed',
+            phases,
+          },
+          { status: 502 },
+        );
+      }
+      try {
+        if (!fs.existsSync(htmlAbs) || fs.statSync(htmlAbs).size < 50) {
+          return Response.json(
+            { ok: false, error: 'Rendered HTML missing or too small', phases },
+            { status: 502 },
+          );
+        }
+      } catch {
+        return Response.json({ ok: false, error: 'Could not stat rendered HTML', phases }, { status: 502 });
+      }
+
+      const downloadHref = `/api/output/file?name=${encodeURIComponent(htmlName)}`;
+
+      return Response.json({
+        ok: true,
+        renderOnly: true,
+        templatePath: tpl,
+        htmlPath: htmlRel,
+        downloadUrl: downloadHref,
+        format,
+        phases,
+      });
+    }
+
     const r1 = await runWithTimeout(process.execPath, [renderScript, `--format=${format}`, `--root=${root}`, tpl, tmpHtmlRel], {
       cwd: root,
       env: process.env,

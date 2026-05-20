@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { useEscapeClose } from '@/lib/use-escape-close';
+
 type Props = {
   open: boolean;
   title: string;
@@ -13,6 +15,8 @@ type Props = {
 
 export function ReportViewerModal({ open, title, markdown, onClose }: Props) {
   const [mode, setMode] = useState<'preview' | 'raw'>('preview');
+
+  useEscapeClose(open, onClose);
 
   useEffect(() => {
     if (open) setMode('preview');
@@ -28,12 +32,13 @@ export function ReportViewerModal({ open, title, markdown, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
       role="presentation"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
         role="dialog"
+        aria-modal="true"
         aria-label="Report">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <h3 className="min-w-0 flex-1 truncate pr-2 text-lg font-medium text-white">{title}</h3>
@@ -60,7 +65,7 @@ export function ReportViewerModal({ open, title, markdown, onClose }: Props) {
             </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-4 py-4">
           {mode === 'raw' ? (
             <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted">{markdown}</pre>
           ) : (
