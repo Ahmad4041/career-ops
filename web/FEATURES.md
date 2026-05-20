@@ -56,17 +56,31 @@ See also: [`README.md`](README.md) (API table), [`UX-ROADMAP.md`](UX-ROADMAP.md)
 | UI | File |
 |----|------|
 | Modal | `components/application-detail-modal.tsx` |
+| Application materials (optional phases) | `components/application-materials-panel.tsx` |
 | Escape close | `lib/use-escape-close.ts` |
 | Lazy import | `dynamic()` in `app/page.tsx` |
 
 | API | Purpose |
 |-----|---------|
 | `PATCH /api/applications` | Update `status` / `notes` on row `{ applicationNumber }` |
+| `GET/PUT /api/applications/:n/materials` | Load/save text drafts (`data/application-materials/:n.json`) |
+| `POST /api/applications/:n/materials/generate` | Generate one phase via `generate-application-materials.mjs` |
 | `GET /api/cv/assets?reportPath=reports/…md` | Best HTML / PDF / `.tex` in `output/` for report slug |
 | `GET /api/report/[...path]` | Report markdown for viewer |
 | `GET /api/output/file?name=…` | Download or inline (`inline=1` for iframe) |
 
-**Actions in modal:** Save tracker row · View report · Download PDF (if matched) · CV section below.
+**Application materials (per job, all optional):** Collapsible sections with **Generate** only when you need them — leave empty otherwise.
+
+| Phase | Output |
+|-------|--------|
+| Tailored summary | Plain-text professional summary (report + cv.md) |
+| Cover letter | 250–400 word letter |
+| Recruiter message | ≤300 char LinkedIn-style note (`modes/contacto.md`) |
+| Form questions | One question per line → Q&A answers from report + CV |
+
+**Generator (default: Claude Code):** Same headless agents as the job queue — `claude -p` with `modes/application-materials.md`, or **Cursor Agent CLI**, or optional **Gemini** (`GEMINI_API_KEY`). Pick in the materials panel or **Settings → Dashboard**. Server default: `CAREER_OPS_MATERIALS_PROVIDER=claude|cursor|gemini`. CLI fallback: `node generate-application-materials.mjs --application N --phase summary` (Gemini only).
+
+**Actions in modal:** Save tracker row · Materials · View report · Download PDF (if matched) · CV section below.
 
 ---
 

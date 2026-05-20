@@ -60,7 +60,7 @@ When extending tables:
 ## Component hygiene
 
 - **Extract** from `page.tsx` when a block exceeds ~80 lines or repeats: `ApplicationsTable`, `MetricsStrip`, `MainTabs`, etc. Keep API types (`AppRow`, `Payload`) in `web/types/` if shared.
-- **Modals** (`application-detail-modal`, `report-viewer-modal`, `queue-job-modal`): fixed overlay, backdrop click + **`Escape`** (`web/lib/use-escape-close.ts`), `aria-modal` on the dialog panel; avoid full-screen **`backdrop-blur`** (scroll jank). **Report** Markdown preview: width-aware tables (`table-fixed`, `break-words`, horizontal scroll) — parity with Go viewer [#513](https://github.com/santifer/career-ops/pull/513).
+- **Modals** (`application-detail-modal`, `report-viewer-modal`, `queue-job-modal`): fixed overlay, backdrop click + **`Escape`** (`web/lib/use-escape-close.ts`), `aria-modal` on the dialog panel; avoid full-screen **`backdrop-blur`** (scroll jank). **Application materials** (`application-materials-panel.tsx`): optional per-phase Generate (summary, cover letter, recruiter msg, custom Q&A); persisted under `data/application-materials/{n}.json`; needs `GEMINI_API_KEY`. **Report** Markdown preview: width-aware tables (`table-fixed`, `break-words`, horizontal scroll) — parity with Go viewer [#513](https://github.com/santifer/career-ops/pull/513).
 
 ## Anti-patterns
 

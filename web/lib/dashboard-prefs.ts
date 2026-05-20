@@ -33,3 +33,35 @@ export function shouldConfirmBeforeEnqueue(): boolean {
 export function jobQueueConfirmLabel(mode: JobQueueConfirmMode): string {
   return mode === 'bypass' ? 'Bypass (start immediately)' : 'Ask before starting';
 }
+
+export type MaterialsProviderPref = 'claude' | 'cursor' | 'gemini';
+
+const MATERIALS_PROVIDER_KEY = 'careerOpsMaterialsProvider';
+
+/** Cursor matches most evaluate-job setups; Claude when you have quota. */
+const DEFAULT_MATERIALS_PROVIDER: MaterialsProviderPref = 'cursor';
+
+export function loadMaterialsProvider(): MaterialsProviderPref {
+  if (typeof window === 'undefined') return DEFAULT_MATERIALS_PROVIDER;
+  try {
+    const v = window.localStorage.getItem(MATERIALS_PROVIDER_KEY);
+    if (v === 'claude' || v === 'cursor' || v === 'gemini') return v;
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_MATERIALS_PROVIDER;
+}
+
+export function saveMaterialsProvider(p: MaterialsProviderPref): void {
+  try {
+    window.localStorage.setItem(MATERIALS_PROVIDER_KEY, p);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function materialsProviderLabel(p: MaterialsProviderPref): string {
+  if (p === 'claude') return 'Claude Code (claude -p)';
+  if (p === 'cursor') return 'Cursor Agent CLI';
+  return 'Gemini API (GEMINI_API_KEY)';
+}

@@ -1,15 +1,19 @@
-import { spawn, type SpawnOptionsWithoutStdio } from 'child_process';
+import { spawn, type SpawnOptions } from 'child_process';
 
 export type RunResult = { code: number; stdout: string; stderr: string };
+
+/** Default stdin=ignore — headless CLIs (Cursor agent, Claude) must not wait on an open pipe. */
+const AGENT_STDIO: SpawnOptions['stdio'] = ['ignore', 'pipe', 'pipe'];
 
 export function runWithTimeout(
   command: string,
   args: string[],
-  opts: SpawnOptionsWithoutStdio & { timeoutMs: number },
+  opts: SpawnOptions & { timeoutMs: number },
 ): Promise<RunResult> {
   const { timeoutMs, ...spawnOpts } = opts;
+  const stdio = spawnOpts.stdio ?? AGENT_STDIO;
   return new Promise((resolve) => {
-    const child = spawn(command, args, spawnOpts);
+    const child = spawn(command, args, { ...spawnOpts, stdio });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {

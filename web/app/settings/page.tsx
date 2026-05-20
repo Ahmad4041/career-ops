@@ -6,8 +6,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   jobQueueConfirmLabel,
   loadJobQueueConfirm,
+  loadMaterialsProvider,
+  materialsProviderLabel,
   saveJobQueueConfirm,
+  saveMaterialsProvider,
   type JobQueueConfirmMode,
+  type MaterialsProviderPref,
 } from '@/lib/dashboard-prefs';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -409,9 +413,11 @@ const GROUP_TITLE: Record<(typeof GROUP_ORDER)[number], string> = {
 
 function DashboardPrefsPanel() {
   const [jobQueueConfirm, setJobQueueConfirm] = useState<JobQueueConfirmMode>('bypass');
+  const [materialsProvider, setMaterialsProvider] = useState<MaterialsProviderPref>('cursor');
 
   useEffect(() => {
     setJobQueueConfirm(loadJobQueueConfirm());
+    setMaterialsProvider(loadMaterialsProvider());
   }, []);
 
   const onJobQueueConfirmChange = useCallback((mode: JobQueueConfirmMode) => {
@@ -438,6 +444,25 @@ function DashboardPrefsPanel() {
           <strong className="text-white/90">Bypass</strong> — enqueue evaluate/scan jobs immediately.{' '}
           <strong className="text-white/90">Ask</strong> — browser confirm before starting (Cursor agent
           warning, Claude long run, node tasks).
+        </p>
+      </label>
+      <label className="mt-3 block text-xs">
+        <span className="text-muted">Application materials generator</span>
+        <select
+          value={materialsProvider}
+          onChange={(e) => {
+            const p = e.target.value as MaterialsProviderPref;
+            setMaterialsProvider(p);
+            saveMaterialsProvider(p);
+          }}
+          className="mt-1 w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-white">
+          <option value="claude">{materialsProviderLabel('claude')}</option>
+          <option value="cursor">{materialsProviderLabel('cursor')}</option>
+          <option value="gemini">{materialsProviderLabel('gemini')}</option>
+        </select>
+        <p className="mt-1.5 text-[10px] leading-snug text-muted">
+          Used when you click <strong className="text-white/90">Generate</strong> in the application modal (summary,
+          cover letter, recruiter note, form Q&amp;A). Claude/Cursor match the evaluate-job CLI; Gemini is optional.
         </p>
       </label>
     </section>

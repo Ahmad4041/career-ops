@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { ApplicationMaterialsPanel } from '@/components/application-materials-panel';
 import { TRACKER_STATUS_LABELS } from '@/lib/tracker-states';
 import { useEscapeClose } from '@/lib/use-escape-close';
 
@@ -324,7 +325,7 @@ export function ApplicationDetailModal({
       role="presentation"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface p-5 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface p-5 shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label="Application">
@@ -387,6 +388,13 @@ export function ApplicationDetailModal({
           </label>
 
           {err && <p className="text-sm text-rose-300">{err}</p>}
+
+          <ApplicationMaterialsPanel
+            applicationNumber={row.number}
+            company={row.company}
+            role={row.role}
+            reportPath={row.reportPath}
+          />
 
           <div className="flex flex-wrap gap-2">
             <button
