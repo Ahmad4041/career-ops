@@ -37,19 +37,21 @@ function parseArgs(argv) {
   let application = null;
   let phase = null;
   let questions = '';
+  let greeting = '';
   let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--application' && argv[i + 1]) application = parseInt(argv[++i], 10);
     else if (a === '--phase' && argv[i + 1]) phase = argv[++i];
     else if (a === '--questions' && argv[i + 1]) questions = argv[++i];
+    else if (a === '--greeting' && argv[i + 1]) greeting = argv[++i];
     else if (a === '--model' && argv[i + 1]) modelName = argv[++i];
     else if (a === '--help' || a === '-h') {
       console.error('See file header for usage.');
       process.exit(0);
     }
   }
-  return { application, phase, questions, modelName };
+  return { application, phase, questions, greeting, modelName };
 }
 
 function findApplication(root, num) {
@@ -97,12 +99,17 @@ function findApplication(root, num) {
   return null;
 }
 
-function phaseInstruction(phase, questions) {
+function phaseInstruction(phase, questions, greeting) {
   switch (phase) {
     case 'summary':
       return 'Generate ONLY the tailored professional summary (plain text, 2-3 paragraphs). No title, no markdown headings.';
-    case 'coverLetter':
+    case 'coverLetter': {
+      const salutation = (greeting ?? '').trim();
+      if (salutation) {
+        return `Generate ONLY the cover letter body (plain text, 250-400 words). The candidate set this salutation separately (use exactly; do not repeat in output): "${salutation}". No markdown headings.`;
+      }
       return 'Generate ONLY the full cover letter (plain text, 250-400 words). No markdown headings.';
+    }
     case 'recruiterMessage':
       return 'Generate ONLY the recruiter LinkedIn message. MAX 300 characters total. Plain text, one message.';
     case 'customQuestions': {
@@ -122,7 +129,7 @@ function emit(obj) {
   process.stdout.write(`${JSON.stringify(obj)}\n`);
 }
 
-const { application, phase, questions, modelName } = parseArgs(process.argv.slice(2));
+const { application, phase, questions, greeting, modelName } = parseArgs(process.argv.slice(2));
 
 if (!Number.isFinite(application) || application < 1) {
   emit({ ok: false, error: 'Missing or invalid --application <number>' });
@@ -164,7 +171,7 @@ const digest = readOptional(join(ROOT, 'article-digest.md'), 'article-digest.md'
 
 let task;
 try {
-  task = phaseInstruction(phase, questions);
+  task = phaseInstruction(phase, questions, greeting);
 } catch (e) {
   emit({ ok: false, error: e instanceof Error ? e.message : String(e) });
   process.exit(1);

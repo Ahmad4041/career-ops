@@ -16,6 +16,9 @@ export type AppRow = {
   linkedTexBasename: string | null;
   duplicateOf: number | null;
   duplicateNote: string | null;
+  location: string;
+  payRange: string;
+  lastContact: string;
 };
 
 export type PipelineMetrics = {

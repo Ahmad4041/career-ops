@@ -10,6 +10,8 @@ const NODE = {
   /** scan.mjs --verify — Playwright liveness check before pipeline append (upstream #487) */
   'scan-verify': { script: 'scan.mjs', args: ['--verify'], timeoutMs: 900_000 },
   verify: { script: 'verify-pipeline.mjs', args: [] as string[], timeoutMs: 120_000 },
+  /** verify-portals.mjs — ATS slug validator for portals.yml tracked_companies */
+  'verify-portals': { script: 'verify-portals.mjs', args: [] as string[], timeoutMs: 300_000 },
   merge: { script: 'merge-tracker.mjs', args: [] as string[], timeoutMs: 60_000 },
   doctor: { script: 'doctor.mjs', args: [] as string[], timeoutMs: 60_000 },
 } as const;
@@ -17,6 +19,8 @@ const NODE = {
 const BASH = {
   'batch-runner-dry-run': { script: 'batch-runner.sh', args: ['--dry-run'] as string[], timeoutMs: 120_000 },
   'batch-runner': { script: 'batch-runner.sh', args: [] as string[], timeoutMs: 1_800_000 },
+  'batch-runner-status': { script: 'batch-runner.sh', args: ['--status'] as string[], timeoutMs: 60_000 },
+  'batch-runner-watch': { script: 'batch-runner.sh', args: ['--watch'] as string[], timeoutMs: 1_800_000 },
 } as const;
 
 async function runNode(root: string, scriptFile: string, scriptArgs: string[], timeoutMs: number) {
@@ -56,6 +60,14 @@ export async function POST(request: Request) {
   }
 
   const cmd = typeof body === 'object' && body !== null && 'cmd' in body ? (body as { cmd: string }).cmd : '';
+  const extraArgsRaw =
+    typeof body === 'object' && body !== null && 'extraArgs' in body
+      ? (body as { extraArgs: unknown }).extraArgs
+      : undefined;
+  const extraArgs =
+    Array.isArray(extraArgsRaw) && extraArgsRaw.every((a) => typeof a === 'string')
+      ? (extraArgsRaw as string[])
+      : [];
   const root = getCareerOpsRoot();
 
   let result: Awaited<ReturnType<typeof runNode>>;
@@ -80,7 +92,7 @@ export async function POST(request: Request) {
     const bk = cmd as keyof typeof BASH;
     key = bk;
     const spec = BASH[bk];
-    result = await runBatchScript(root, spec.script, [...spec.args], spec.timeoutMs);
+    result = await runBatchScript(root, spec.script, [...spec.args, ...extraArgs], spec.timeoutMs);
   } else {
     return Response.json(
       {

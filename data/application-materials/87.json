@@ -1,0 +1,12 @@
+{
+  "applicationNumber": 87,
+  "company": "Mantel",
+  "role": "Senior Software Engineer (Python/React)",
+  "reportPath": "reports/087-mantel-senior-software-engineer-python-react-2026-05-20.md",
+  "updatedAt": "2026-05-20T17:53:54.205Z",
+  "summary": "",
+  "coverLetter": "Dear Mantel team,\n\nI'm applying for your Senior Software Engineer (Python/React) role because Mantel is where work I'm already doing belongs: GenAI delivery and legacy modernisation for major AU clients, AI-assisted development with human oversight, and a flat Digital team that ships across stacks.\n\nI'm a Melbourne-based senior engineer with production full-stack work since 2018 across banking, health, cruise, and freelance clients. I lead in React and TypeScript with Node, Java/Spring, and REST/SOAP APIs. At CMB I shipped Global Wire Payments (GPOW) in a Wells Fargo context—React SPAs, Node and Spring services, WebSockets for live updates, Jenkins CI/CD, microservices decomposition, and TDD with high unit-test coverage on payment flows. I operated with AWS CloudWatch and Splunk when production issues mattered.\n\nFreelance ownership and LangChain-oriented open source since 2021 match consultancy rotation: ambiguous scope, client-facing delivery, pair programming, and AI tooling I review before merge—the same discipline your posting describes for agentic workflows and AI code security. My Master of Applied AI at Deakin supports Python for AI-adjacent work; I ship strongest in React/Node/Spring daily and deepen Python where clients need it, which your JD explicitly allows. Kong and Apigee are new labels on familiar microservices and OAuth/JWT patterns—I'm ready to ramp on your gateway standards early.\n\nI'm choosing Mantel for structured upskilling, the AI Gateway, and enterprise client breadth. Melbourne hybrid fits me; Sydney travel when projects need it is fine. I'd welcome a conversation with Greg Maratos or the Digital team.\n\nMuhammad Ahmad Naeem",
+  "recruiterMessage": "",
+  "customQuestionsInput": "",
+  "customQa": []
+}

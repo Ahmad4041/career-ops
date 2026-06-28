@@ -70,6 +70,10 @@ export async function PUT(
   const materials: ApplicationMaterials = {
     ...existing,
     summary: typeof o.summary === 'string' ? o.summary : existing.summary,
+    coverLetterSalutation:
+      typeof o.coverLetterSalutation === 'string'
+        ? o.coverLetterSalutation
+        : existing.coverLetterSalutation,
     coverLetter: typeof o.coverLetter === 'string' ? o.coverLetter : existing.coverLetter,
     recruiterMessage: typeof o.recruiterMessage === 'string' ? o.recruiterMessage : existing.recruiterMessage,
     customQuestionsInput:

@@ -22,10 +22,34 @@ export type JobRecord = {
   meta: Record<string, unknown>;
   logs: LogEntry[];
   error?: string;
+  archived?: boolean;
 };
 
-const jobs = new Map<string, JobRecord>();
-const subscribers = new Map<string, Set<(entry: LogEntry) => void>>();
+/**
+ * In-memory job queue. Must live on `globalThis` so every Next.js / Turbopack
+ * route bundle shares one Map — otherwise POST /api/jobs and GET /api/jobs/[id]
+ * can each get an empty store when dynamic routes compile on first request.
+ */
+type JobStoreState = {
+  jobs: Map<string, JobRecord>;
+  subscribers: Map<string, Set<(entry: LogEntry) => void>>;
+};
+
+const STORE_KEY = Symbol.for('career-ops.job-store');
+
+function jobStoreState(): JobStoreState {
+  const g = globalThis as typeof globalThis & { [STORE_KEY]?: JobStoreState };
+  if (!g[STORE_KEY]) {
+    g[STORE_KEY] = {
+      jobs: new Map(),
+      subscribers: new Map(),
+    };
+  }
+  return g[STORE_KEY];
+}
+
+const jobs = jobStoreState().jobs;
+const subscribers = jobStoreState().subscribers;
 
 const MAX_JOBS = 100;
 
@@ -63,8 +87,34 @@ export function getJob(id: string): JobRecord | undefined {
   return jobs.get(id);
 }
 
-export function listJobs(limit = 50): JobRecord[] {
-  return [...jobs.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+export function listJobs(limit = 50, opts: { includeArchived?: boolean } = {}): JobRecord[] {
+  const includeArchived = opts.includeArchived === true;
+  return [...jobs.values()]
+    .filter((j) => includeArchived || !j.archived)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, limit);
+}
+
+export function deleteJob(id: string): boolean {
+  const existed = jobs.delete(id);
+  subscribers.delete(id);
+  return existed;
+}
+
+export function archiveJob(id: string): boolean {
+  const job = jobs.get(id);
+  if (!job) return false;
+  job.archived = true;
+  job.updatedAt = Date.now();
+  return true;
+}
+
+export function unarchiveJob(id: string): boolean {
+  const job = jobs.get(id);
+  if (!job) return false;
+  job.archived = false;
+  job.updatedAt = Date.now();
+  return true;
 }
 
 export function setJobStatus(id: string, status: JobStatus, exitCode?: number | null, error?: string): void {

@@ -20,6 +20,11 @@ export async function GET() {
         shell: `cursor "${root}"`,
       },
       {
+        id: 'antigravity-interactive',
+        label: 'Antigravity CLI in this repo',
+        shell: `cd "${root}" && agy`,
+      },
+      {
         id: 'claude-batch-dry-run',
         label: 'Batch runner dry-run (same as web button)',
         shell: `cd "${root}/batch" && ./batch-runner.sh --dry-run`,

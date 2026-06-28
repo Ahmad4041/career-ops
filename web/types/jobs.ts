@@ -7,4 +7,7 @@ export type JobSummary = {
   createdAt: number;
   updatedAt: number;
   logLines: number;
+  archived?: boolean;
+  url?: string;
+  error?: string;
 };

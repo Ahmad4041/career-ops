@@ -9,6 +9,8 @@ export type ApplicationMaterials = {
   reportPath: string;
   updatedAt: string;
   summary: string;
+  /** Optional opening line, e.g. "Dear Hiring Manager," — stored separately from body */
+  coverLetterSalutation: string;
   coverLetter: string;
   recruiterMessage: string;
   /** Raw questions (one per line) before generate */
@@ -23,6 +25,7 @@ export const EMPTY_MATERIALS = (n: number, company: string, role: string, report
   reportPath,
   updatedAt: new Date().toISOString(),
   summary: '',
+  coverLetterSalutation: '',
   coverLetter: '',
   recruiterMessage: '',
   customQuestionsInput: '',

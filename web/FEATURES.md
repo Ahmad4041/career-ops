@@ -35,6 +35,8 @@ See also: [`README.md`](README.md) (API table), [`UX-ROADMAP.md`](UX-ROADMAP.md)
 
 **API:** `GET /api/applications` → reads `data/applications.md`, annotates later duplicates with `duplicateOf` → lowest matching `#`.
 
+**Follow-ups due:** Collapsible panel below metrics runs repo-root `followup-cadence.mjs` via `GET /api/followups` (optional `?overdueOnly=1`). Shows overdue/urgent count, company/role, days overdue, and suggested action; click a row to open the application modal. Empty tracker and script errors surface inline without blocking the table.
+
 **Filters:** Text search (company/role/notes), status chips, **company dropdown** (normalized name key), sortable headers. Bookmark via URL.
 
 **Duplicates:** Rows that match an earlier application (merge-tracker rules) show **↩ same as #N**; click opens the original row. Evaluate on an existing posting URL still queues the job; logs note the canonical `#` and you can re-run.
@@ -46,6 +48,31 @@ See also: [`README.md`](README.md) (API table), [`UX-ROADMAP.md`](UX-ROADMAP.md)
 - **`/`** — focus search (skipped when cursor is already in an input).
 - **Escape** in search — clear text query only (status filter unchanged).
 - **Enter** on row — open application modal.
+
+---
+
+## 1b. Pipeline inbox tab
+
+**Goal:** Review pending job URLs from `data/pipeline.md` and enqueue headless evaluations without batch mode.
+
+| UI | File |
+|----|------|
+| Tab + refresh | `app/page.tsx` |
+| Pending URL table | `components/pipeline-inbox-table.tsx` |
+
+| Logic | File |
+|-------|------|
+| Parse Pending section (`- [ ]` / `- [!]`) | `lib/pipeline-parser.ts` |
+
+**API:** `GET /api/pipeline` → `{ entries: [{ url, source?, notes?, line? }], missing?, careerOpsRoot }`.
+
+**Columns:** URL (hostname + link), optional **Source** (company from `url | company | role`), **Notes** (role or error text). **Evaluate** enqueues the same `POST /api/jobs` `evaluate_job` as the right-drawer URL field (prefills drawer URL, opens stream).
+
+**Empty states:** Missing `data/pipeline.md` vs empty Pending section — distinct copy with link to Settings.
+
+**Refresh:** On dashboard load, **Refresh data** / **Refresh inbox**, after **portal scan** / **verify pipeline** jobs complete (switches to Pipeline tab), and after left-nav **Scan portals** / **Scan + verify** via `/api/run`.
+
+**Note:** Scan only appends to `data/pipeline.md`; rows appear in Applications after evaluate + merge-tracker (see §6).
 
 ---
 
@@ -199,17 +226,21 @@ Preview / Markdown toggle; tables wrap on narrow viewports. **Escape** or backdr
 
 ## 5. Left nav — repo commands
 
-**API:** `POST /api/run` with `{ "cmd": "…" }` — see `app/api/run/route.ts`.
+**API:** `POST /api/run` with `{ "cmd": "…", "extraArgs"?: string[] }` — see `app/api/run/route.ts`.  
+For batch commands, optional `extraArgs` are appended after the command’s built-in flags (e.g. `{ "cmd": "batch-runner", "extraArgs": ["--model", "claude-sonnet-4-6"] }`).
 
 | `cmd` | Script |
 |-------|--------|
 | `scan` | `scan.mjs` |
 | `scan-verify` | `scan.mjs --verify` (Playwright; drops expired postings) |
 | `verify` | `verify-pipeline.mjs` |
+| `verify-portals` | `verify-portals.mjs` (ATS slug validator for `portals.yml`) |
 | `merge` | `merge-tracker.mjs` |
 | `doctor` | `doctor.mjs` |
-| `batch-runner-dry-run` | `batch/batch-runner.sh --dry-run` |
-| `batch-runner` | `batch/batch-runner.sh` (confirm in UI) |
+| `batch-runner-dry-run` | `batch/batch-runner.sh --dry-run` (+ optional `--model` via nav field or `extraArgs`) |
+| `batch-runner` | `batch/batch-runner.sh` (confirm in UI; optional `--model`) |
+| `batch-runner-status` | `batch/batch-runner.sh --status` (progress snapshot) |
+| `batch-runner-watch` | `batch/batch-runner.sh --watch` (confirm in UI; live refresh until done, up to 30 min) |
 
 Also: **Open Cursor** / **Open Claude Code** → `POST /api/cli/open`.
 
@@ -222,6 +253,8 @@ Also: **Open Cursor** / **Open Claude Code** → `POST /api/cli/open`.
 | `GET /api/jobs` | List recent jobs |
 | `POST /api/jobs` | Enqueue Claude / Cursor / node task |
 | `GET /api/jobs/:id/stream` | SSE log stream |
+
+**Note:** The job queue is **in-memory** in the Next.js server process. After `next dev` hot-reload or restart, old job IDs return **404** on `/stream` — the drawer clears stale streams and shows a short info line; enqueue again or pick a job still listed under Recent.
 
 Workers: `lib/jobs/run-claude-job.ts`, `run-cursor-job.ts`, `run-node-job.ts`.
 
@@ -237,11 +270,13 @@ Workers: `lib/jobs/run-claude-job.ts`, `run-cursor-job.ts`, `run-node-job.ts`.
 
 **Dashboard panel (browser-only):** Job queue confirm mode (bypass vs ask) — see §6.
 
-Edit allowlisted paths (`cv.md`, `config/profile.yml`, `portals.yml`, `modes/_profile.md`, templates).  
+**Language modes (repo file):** Card above the file tree sets `language.modes_dir` in `config/profile.yml` via pill buttons. Default **English** uses root `modes/` (clears the YAML key). Translated packs (`modes/de`, `modes/fr`, `modes/ja`, `modes/tr`, `modes/zh`) appear only when that folder exists under `CAREER_OPS_ROOT/modes/`. Saves immediately to disk; if **Profile** is open in the editor, the buffer reloads.
+
+Edit allowlisted paths (`cv.md`, `config/profile.yml`, `portals.yml`, `modes/_profile.md`, `voice-dna.md`, templates).  
 
 **Templates list:** Every `templates/*.html` and `templates/*.tex` on disk (e.g. `cv-template.html`, `cv-minimal-slot.html`, custom layouts) appears under **Templates** — discovered at load time, same rules as `GET /api/pdf/templates`. Plus `templates/README.md`.
 
-**API:** `GET /api/settings`, `GET/PUT /api/settings/file` — allowlist in `lib/settings-allowlist.ts`.
+**API:** `GET /api/settings`, `GET/PUT /api/settings/file` — allowlist in `lib/settings-allowlist.ts`. **`GET/PUT /api/settings/language-modes`** — read/write `language.modes_dir` (see `lib/language-modes.ts`).
 
 ---
 

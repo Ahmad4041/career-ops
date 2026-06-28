@@ -15,12 +15,25 @@ import {
 import { shouldConfirmBeforeEnqueue } from '@/lib/dashboard-prefs';
 import { buildTableQueryString, parseTableQueryFromUrl } from '@/lib/applications-url-query';
 import { loadTableDensity, saveTableDensity, type TableDensity } from '@/lib/table-density';
+import {
+  loadTableColumns,
+  saveTableColumns,
+  toggleColumn,
+  type OptionalColumnId,
+  type TableColumnVisibility,
+} from '@/lib/table-columns';
 import { ApplicationsStatusChips } from '@/components/applications-status-chips';
 import { ApplicationsTable } from '@/components/applications-table';
 import { ApplicationsToolbar } from '@/components/applications-toolbar';
+import {
+  PipelineInboxTable,
+  type PipelineInboxEntry,
+} from '@/components/pipeline-inbox-table';
+import { FollowupsDuePanel } from '@/components/followups-due-panel';
 import type { AppRowLite } from '@/components/application-detail-modal';
 import type { JobSummary } from '@/types/jobs';
 import type { AppRow, TrackerPayload as Payload } from '@/types/dashboard';
+import type { FollowupsPayload } from '@/types/followups';
 
 const ApplicationDetailModal = dynamic(
   () => import('@/components/application-detail-modal').then((m) => m.ApplicationDetailModal),
@@ -49,6 +62,7 @@ type CliStatus = {
   careerOpsRoot: string;
   claude: { path: string | null; available: boolean };
   cursor: { path: string | null; available: boolean };
+  antigravity: { path: string | null; available: boolean };
   bash: { path: string | null; available: boolean };
 };
 
@@ -270,10 +284,12 @@ function NavBtn({
 
 function DashboardPageInner() {
   const [data, setData] = useState<Payload | null>(null);
+  const [followups, setFollowups] = useState<FollowupsPayload | null>(null);
+  const [followupsErr, setFollowupsErr] = useState<string | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [runCmdBusy, setRunCmdBusy] = useState<string | null>(null);
-  const [ideBusy, setIdeBusy] = useState<'cursor' | 'claude-code' | null>(null);
+  const [ideBusy, setIdeBusy] = useState<'cursor' | 'claude-code' | 'antigravity' | null>(null);
   const [agentQueueBusy, setAgentQueueBusy] = useState(false);
   const [runOutput, setRunOutput] = useState<RunResult | null>(null);
   const [preview, setPreview] = useState<{ title: string; markdown: string } | null>(null);
@@ -286,13 +302,21 @@ function DashboardPageInner() {
   const [jobUrl, setJobUrl] = useState('');
   const [jobJd, setJobJd] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(true);
-  const [mainTab, setMainTab] = useState<'applications' | 'output' | 'upstream'>('applications');
+  const [mainTab, setMainTab] = useState<'applications' | 'pipeline' | 'output' | 'upstream'>(
+    'applications',
+  );
+  const [pipelineEntries, setPipelineEntries] = useState<PipelineInboxEntry[]>([]);
+  const [pipelineMissing, setPipelineMissing] = useState(false);
+  const [pipelineErr, setPipelineErr] = useState<string | null>(null);
+  const [pipelineRefreshing, setPipelineRefreshing] = useState(false);
+  const [evaluatingPipelineUrl, setEvaluatingPipelineUrl] = useState<string | null>(null);
   const [gitStatus, setGitStatus] = useState<GitJson | null>(null);
   const [gitErr, setGitErr] = useState<string | null>(null);
   const [gitBusy, setGitBusy] = useState<'refresh' | 'fetch' | 'sync' | null>(null);
   const [gitSyncLog, setGitSyncLog] = useState<string | null>(null);
   const [selectedApp, setSelectedApp] = useState<AppRow | null>(null);
   const [inspectJob, setInspectJob] = useState<JobSummary | null>(null);
+  const [showArchivedJobs, setShowArchivedJobs] = useState(false);
   const [filterSearch, setFilterSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -300,10 +324,21 @@ function DashboardPageInner() {
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [tableDensity, setTableDensity] = useState<TableDensity>('comfortable');
+  const [visibleColumns, setVisibleColumns] = useState<TableColumnVisibility>(() =>
+    loadTableColumns(),
+  );
+  const [batchModel, setBatchModel] = useState('');
   const applicationsTableRef = useRef<HTMLElement | null>(null);
   const applicationsSearchRef = useRef<HTMLInputElement>(null);
   const jobStatusRef = useRef<Map<string, string> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  /** Skip stale-job cleanup right after enqueue (list may lag one refresh). */
+  const streamJobIdGraceRef = useRef<string | null>(null);
+  const handleJobFinishedRef = useRef<(job: Pick<JobSummary, 'operation' | 'status'>) => Promise<void>>(
+    async () => {},
+  );
+  const refreshJobListRef = useRef<() => Promise<void>>(async () => {});
+  const loadRef = useRef<() => Promise<void>>(async () => {});
   const logViewportRef = useRef<HTMLPreElement | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -312,11 +347,20 @@ function DashboardPageInner() {
 
   useEffect(() => {
     setTableDensity(loadTableDensity());
+    setVisibleColumns(loadTableColumns());
   }, []);
 
   const handleDensityChange = useCallback((d: TableDensity) => {
     setTableDensity(d);
     saveTableDensity(d);
+  }, []);
+
+  const handleToggleColumn = useCallback((id: OptionalColumnId) => {
+    setVisibleColumns((prev) => {
+      const next = toggleColumn(prev, id);
+      saveTableColumns(next);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -446,14 +490,47 @@ function DashboardPageInner() {
     [data?.applications],
   );
 
+  const loadPipeline = useCallback(async () => {
+    setPipelineErr(null);
+    setPipelineRefreshing(true);
+    try {
+      const res = await fetch('/api/pipeline', { cache: 'no-store' });
+      const json = (await res.json()) as {
+        entries?: PipelineInboxEntry[];
+        missing?: boolean;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error || res.statusText);
+      setPipelineEntries(json.entries ?? []);
+      setPipelineMissing(Boolean(json.missing));
+    } catch (e) {
+      setPipelineErr(e instanceof Error ? e.message : 'Failed to load pipeline');
+      setPipelineEntries([]);
+    } finally {
+      setPipelineRefreshing(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoadErr(null);
+    setFollowupsErr(null);
     setRefreshing(true);
     try {
-      const res = await fetch('/api/applications', { cache: 'no-store' });
-      const json = (await res.json()) as Payload & { error?: string };
-      if (!res.ok) throw new Error(json.error || res.statusText);
-      setData(json);
+      const [appsRes, fuRes] = await Promise.all([
+        fetch('/api/applications', { cache: 'no-store' }),
+        fetch('/api/followups?overdueOnly=1', { cache: 'no-store' }),
+      ]);
+      const appsJson = (await appsRes.json()) as Payload & { error?: string };
+      if (!appsRes.ok) throw new Error(appsJson.error || appsRes.statusText);
+      setData(appsJson);
+
+      const fuJson = (await fuRes.json()) as FollowupsPayload & { error?: string };
+      if (!fuRes.ok) {
+        setFollowupsErr(fuJson.error || fuRes.statusText);
+        setFollowups(null);
+      } else {
+        setFollowups(fuJson);
+      }
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -510,7 +587,8 @@ function DashboardPageInner() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadPipeline();
+  }, [load, loadPipeline]);
 
   const refreshGitStatus = useCallback(async () => {
     setGitErr(null);
@@ -600,7 +678,7 @@ function DashboardPageInner() {
   /** Reload tracker after agent jobs; evaluate success also switches to Applications (rows live in applications.md). */
   const handleJobFinished = useCallback(
     async (job: Pick<JobSummary, 'operation' | 'status'>) => {
-      await load();
+      await Promise.all([load(), loadPipeline()]);
       if (job.status === 'completed' && job.operation === 'evaluate_job') {
         clearApplicationFilters();
         setMainTab('applications');
@@ -609,14 +687,20 @@ function DashboardPageInner() {
         });
       } else if (job.status === 'completed' && job.operation === 'merge_tracker') {
         setMainTab('applications');
+      } else if (
+        job.status === 'completed' &&
+        (job.operation === 'portal_scan' || job.operation === 'verify_pipeline')
+      ) {
+        setMainTab('pipeline');
       }
     },
-    [load, clearApplicationFilters],
+    [load, loadPipeline, clearApplicationFilters],
   );
 
   const refreshJobList = useCallback(async () => {
     try {
-      const res = await fetch('/api/jobs', { cache: 'no-store' });
+      const qs = showArchivedJobs ? '?archived=1' : '';
+      const res = await fetch(`/api/jobs${qs}`, { cache: 'no-store' });
       if (!res.ok) return;
       const json = (await res.json()) as { jobs?: JobSummary[] };
       const jobs = json.jobs ?? [];
@@ -640,13 +724,38 @@ function DashboardPageInner() {
     } catch {
       /* ignore */
     }
-  }, [handleJobFinished]);
+  }, [handleJobFinished, showArchivedJobs]);
+
+  handleJobFinishedRef.current = handleJobFinished;
+  refreshJobListRef.current = refreshJobList;
+  loadRef.current = load;
 
   useEffect(() => {
     void refreshJobList();
     const iv = setInterval(() => void refreshJobList(), 8000);
     return () => clearInterval(iv);
   }, [refreshJobList]);
+
+  /** Drop stream target when the in-memory queue no longer has this id (common after `next dev` reload). */
+  useEffect(() => {
+    if (!streamJobId) return;
+    if (streamJobIdGraceRef.current === streamJobId) return;
+    if (jobSummaries.length === 0) return;
+    if (jobSummaries.some((x) => x.id === streamJobId)) return;
+
+    eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+    setStreamJobId(null);
+    setStreamEntries([
+      {
+        seq: 1,
+        t: Date.now(),
+        channel: 'info',
+        text:
+          '[stream] Job is no longer on the server (dev restart clears the in-memory queue). Enqueue a new run or pick a recent job.',
+      },
+    ]);
+  }, [jobSummaries, streamJobId]);
 
   useEffect(() => {
     if (!streamJobId) {
@@ -704,21 +813,21 @@ function DashboardPageInner() {
               if (jobStatusRef.current === null) jobStatusRef.current = new Map();
               jobStatusRef.current.set(finishedId, finishedStatus);
             }
-            await refreshJobList();
+            await refreshJobListRef.current();
             if (!finishedId) {
-              void load();
+              void loadRef.current();
               return;
             }
             try {
               const res = await fetch(`/api/jobs/${finishedId}`, { cache: 'no-store' });
               if (res.ok) {
                 const j = (await res.json()) as JobSummary;
-                await handleJobFinished(j);
+                await handleJobFinishedRef.current(j);
               } else {
-                void load();
+                void loadRef.current();
               }
             } catch {
-              void load();
+              void loadRef.current();
             }
           })();
         }
@@ -727,30 +836,77 @@ function DashboardPageInner() {
       }
     };
 
+    let streamErrHandled = false;
     es.onerror = () => {
-      setStreamEntries((prev) => {
-        const nextSeq =
-          prev.length === 0 ? 1 : Math.max(...prev.map((p) => p.seq)) + 1;
-        return [
-          ...prev,
+      if (streamErrHandled) return;
+      streamErrHandled = true;
+      es.close();
+      eventSourceRef.current = null;
+      const id = streamJobId;
+      void (async () => {
+        if (!id) return;
+        const fetchJob = async () => fetch(`/api/jobs/${id}`, { cache: 'no-store' });
+        try {
+          let res = await fetchJob();
+          if (res.status === 404 && streamJobIdGraceRef.current === id) {
+            await new Promise((r) => setTimeout(r, 500));
+            res = await fetchJob();
+          }
+          if (res.status === 404) {
+            setStreamJobId(null);
+            streamJobIdGraceRef.current = null;
+            setStreamEntries([
+              {
+                seq: 1,
+                t: Date.now(),
+                channel: 'info',
+                text:
+                  '[stream] Job not found (server restarted or job aged out). Enqueue again or pick a job from Recent.',
+              },
+            ]);
+            return;
+          }
+          if (res.ok) {
+            const job = (await res.json()) as {
+              status: string;
+              exitCode?: number | null;
+              error?: string;
+              logs?: AgentLogEntry[];
+            };
+            const logs = [...(job.logs ?? [])].sort((a, b) => a.seq - b.seq);
+            if (job.status === 'completed' || job.status === 'failed') {
+              const nextSeq =
+                logs.length === 0 ? 1 : Math.max(...logs.map((p) => p.seq)) + 1;
+              logs.push({
+                seq: nextSeq,
+                t: Date.now(),
+                channel: 'info',
+                text: `— job finished: ${job.status}${job.exitCode != null ? ` (exit ${job.exitCode})` : ''}${job.error ? ` — ${job.error}` : ''} —`,
+              });
+            }
+            setStreamEntries(logs);
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
+        setStreamEntries([
           {
-            seq: nextSeq,
+            seq: 1,
             t: Date.now(),
             channel: 'stderr',
             text:
-              '[stream] SSE connection closed or errored. Re-select the job, refresh the page, or open GET /api/jobs/:id for a snapshot.',
+              '[stream] Live stream unavailable. Pick another job from the dropdown or enqueue a new run.',
           },
-        ];
-      });
-      es.close();
-      eventSourceRef.current = null;
+        ]);
+      })();
     };
 
     return () => {
       es.close();
       eventSourceRef.current = null;
     };
-  }, [streamJobId, refreshJobList, load, handleJobFinished]);
+  }, [streamJobId]);
 
   useEffect(() => {
     const el = logViewportRef.current;
@@ -770,9 +926,11 @@ function DashboardPageInner() {
     })();
   }, []);
 
-  async function openIde(target: 'cursor' | 'claude-code') {
+  async function openIde(target: 'cursor' | 'claude-code' | 'antigravity') {
     setIdeBusy(target);
     setRunOutput(null);
+    const targetLabel =
+      target === 'cursor' ? 'Cursor' : target === 'antigravity' ? 'Antigravity CLI' : 'Claude Code';
     try {
       const res = await fetch('/api/cli/open', {
         method: 'POST',
@@ -792,7 +950,7 @@ function DashboardPageInner() {
       setRunOutput({
         ok: true,
         exitCode: 0,
-        stdout: `${target === 'cursor' ? 'Cursor' : 'Claude Code'} launch requested.${j.pid != null ? ` PID ${j.pid}` : ''}\n${j.command ?? ''}`,
+        stdout: `${targetLabel} launch requested.${j.pid != null ? ` PID ${j.pid}` : ''}\n${j.command ?? ''}`,
         stderr: '',
         careerOpsRoot: j.careerOpsRoot ?? data?.careerOpsRoot ?? '',
         title: 'CLI launcher',
@@ -845,49 +1003,39 @@ function DashboardPageInner() {
     }
   }
 
-  async function enqueueAgentJob() {
-    const operation = jobProvider === 'node' ? jobNodeOp : 'evaluate_job';
-    const urlTrim = jobUrl.trim();
+  async function enqueueEvaluateJob(urlOverride?: string) {
+    const urlTrim = (urlOverride ?? jobUrl).trim();
 
-    if (operation === 'evaluate_job') {
-      if (!urlTrim.startsWith('https://')) {
-        setRunOutput({
-          ok: false,
-          exitCode: 1,
-          stdout: '',
-          stderr: 'Headless evaluations need an https job posting URL.',
-          careerOpsRoot: '',
-          title: 'Agent job',
-        });
-        setMainTab('output');
-        return;
-      }
-      if (shouldConfirmBeforeEnqueue()) {
-        const msg =
-          jobProvider === 'cursor'
-            ? 'Start Cursor Agent CLI (`cursor agent --print` or `cursor-agent`)? Uses your Cursor account; ensure `cursor agent` works in a terminal (and CURSOR_API_KEY or `cursor agent login`).'
-            : 'Start Claude Code headless pipeline (claude -p)? This can take many minutes.';
-        if (!window.confirm(msg)) return;
-      }
-    } else if (
-      shouldConfirmBeforeEnqueue() &&
-      !window.confirm(`Run backend node task “${operation}”?`)
-    ) {
+    if (!/^https?:\/\//i.test(urlTrim)) {
+      setRunOutput({
+        ok: false,
+        exitCode: 1,
+        stdout: '',
+        stderr: 'Headless evaluations need an http(s) job posting URL.',
+        careerOpsRoot: '',
+        title: 'Agent job',
+      });
+      setMainTab('output');
       return;
+    }
+    if (shouldConfirmBeforeEnqueue()) {
+      const msg =
+        jobProvider === 'cursor'
+          ? 'Start Cursor Agent CLI (`cursor agent --print` or `cursor-agent`)? Uses your Cursor account; ensure `cursor agent` works in a terminal (and CURSOR_API_KEY or `cursor agent login`).'
+          : 'Start Claude Code headless pipeline (claude -p)? This can take many minutes.';
+      if (!window.confirm(msg)) return;
     }
 
     setAgentQueueBusy(true);
     setRunOutput(null);
     try {
       const body: Record<string, unknown> = {
-        provider: jobProvider,
-        operation,
+        provider: jobProvider === 'node' ? 'claude' : jobProvider,
+        operation: 'evaluate_job',
+        url: urlTrim,
       };
-      if (operation === 'evaluate_job') {
-        body.url = urlTrim;
-        const jd = jobJd.trim();
-        if (jd) body.jdText = jd;
-      }
+      const jd = jobJd.trim();
+      if (jd) body.jdText = jd;
       const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -901,8 +1049,12 @@ function DashboardPageInner() {
       };
       if (!res.ok) throw new Error(j.error ?? res.statusText);
       if (!j.jobId) throw new Error('No jobId returned');
+      streamJobIdGraceRef.current = j.jobId;
       setStreamJobId(j.jobId);
       await refreshJobList();
+      window.setTimeout(() => {
+        if (streamJobIdGraceRef.current === j.jobId) streamJobIdGraceRef.current = null;
+      }, 20_000);
       setDrawerOpen(true);
       const dupLine =
         j.duplicateOf != null
@@ -932,12 +1084,104 @@ function DashboardPageInner() {
     }
   }
 
-  async function runCmd(cmd: string) {
+  async function evaluatePipelineUrl(url: string) {
+    setJobUrl(url);
+    if (jobProvider === 'node') setJobProvider('claude');
+    setEvaluatingPipelineUrl(url);
+    try {
+      await enqueueEvaluateJob(url);
+    } finally {
+      setEvaluatingPipelineUrl(null);
+    }
+  }
+
+  async function enqueueAgentJob() {
+    const operation = jobProvider === 'node' ? jobNodeOp : 'evaluate_job';
+
+    if (operation === 'evaluate_job') {
+      await enqueueEvaluateJob();
+      return;
+    }
+
+    if (
+      shouldConfirmBeforeEnqueue() &&
+      !window.confirm(`Run backend node task “${operation}”?`)
+    ) {
+      return;
+    }
+
+    setAgentQueueBusy(true);
+    setRunOutput(null);
+    try {
+      const body: Record<string, unknown> = {
+        provider: jobProvider,
+        operation,
+      };
+      const res = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = (await res.json()) as {
+        jobId?: string;
+        error?: string;
+        duplicateOf?: number;
+        duplicateWarning?: string;
+      };
+      if (!res.ok) throw new Error(j.error ?? res.statusText);
+      if (!j.jobId) throw new Error('No jobId returned');
+      streamJobIdGraceRef.current = j.jobId;
+      setStreamJobId(j.jobId);
+      await refreshJobList();
+      window.setTimeout(() => {
+        if (streamJobIdGraceRef.current === j.jobId) streamJobIdGraceRef.current = null;
+      }, 20_000);
+      setDrawerOpen(true);
+      setRunOutput({
+        ok: true,
+        exitCode: 0,
+        stdout: `Queued job ${j.jobId}. Streaming agent CLI output below (SSE).`,
+        stderr: '',
+        careerOpsRoot: data?.careerOpsRoot ?? '',
+        title: 'Agent job queue',
+      });
+      setMainTab('output');
+    } catch (e) {
+      setRunOutput({
+        ok: false,
+        exitCode: 1,
+        stdout: '',
+        stderr: e instanceof Error ? e.message : 'Job enqueue failed',
+        careerOpsRoot: data?.careerOpsRoot ?? '',
+        title: 'Agent job queue',
+      });
+      setMainTab('output');
+    } finally {
+      setAgentQueueBusy(false);
+    }
+  }
+
+  const batchExtraArgs = useCallback((): string[] => {
+    const m = batchModel.trim();
+    return m ? ['--model', m] : [];
+  }, [batchModel]);
+
+  async function runCmd(cmd: string, options?: { extraArgs?: string[] }) {
+    const extraArgs = options?.extraArgs ?? [];
     if (cmd === 'batch-runner') {
+      const modelHint = batchModel.trim() ? `\n\nModel: ${batchModel.trim()}` : '';
       const okConfirm =
         typeof window !== 'undefined' &&
         window.confirm(
-          'Run the full batch runner? This invokes claude -p workers and can take a long time. Prefer dry-run first.',
+          `Run the full batch runner? This invokes claude -p workers and can take a long time. Prefer dry-run first.${modelHint}`,
+        );
+      if (!okConfirm) return;
+    }
+    if (cmd === 'batch-runner-watch') {
+      const okConfirm =
+        typeof window !== 'undefined' &&
+        window.confirm(
+          'Watch batch progress live until the run completes? This can take up to 30 minutes and blocks the Output tab until done.',
         );
       if (!okConfirm) return;
     }
@@ -965,11 +1209,14 @@ function DashboardPageInner() {
       const res = await fetch('/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cmd }),
+        body: JSON.stringify(extraArgs.length ? { cmd, extraArgs } : { cmd }),
       });
       const json = (await res.json()) as RunResult;
       setRunOutput({ ...json, pending: false });
-      if (json.ok) await load();
+      if (json.ok) {
+        await Promise.all([load(), loadPipeline()]);
+        if (cmd === 'scan' || cmd === 'scan-verify') setMainTab('pipeline');
+      }
     } catch (e) {
       setRunOutput({
         ok: false,
@@ -997,7 +1244,14 @@ function DashboardPageInner() {
         </div>
         <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-2">
           <p className="px-1 text-[10px] uppercase tracking-wide text-muted">Repo</p>
-          <NavBtn label="Refresh data" pending={refreshing} onClick={() => void load()} />
+          <NavBtn
+            label="Refresh data"
+            pending={refreshing || pipelineRefreshing}
+            onClick={() => {
+              void load();
+              void loadPipeline();
+            }}
+          />
           <NavBtn
             label="Scan portals"
             pending={runCmdBusy === 'scan'}
@@ -1019,6 +1273,13 @@ function DashboardPageInner() {
             onClick={() => void runCmd('verify')}
           />
           <NavBtn
+            label="Verify portals"
+            pending={runCmdBusy === 'verify-portals'}
+            disabled={busyGlobal && runCmdBusy !== 'verify-portals'}
+            onClick={() => void runCmd('verify-portals')}
+            title="Probe Greenhouse/Ashby/Lever slugs in portals.yml"
+          />
+          <NavBtn
             label="Merge tracker"
             pending={runCmdBusy === 'merge'}
             disabled={busyGlobal && runCmdBusy !== 'merge'}
@@ -1030,17 +1291,42 @@ function DashboardPageInner() {
             disabled={busyGlobal && runCmdBusy !== 'doctor'}
             onClick={() => void runCmd('doctor')}
           />
+          <p className="mt-2 px-1 text-[10px] uppercase tracking-wide text-muted">Batch</p>
+          <label className="block px-1 text-[10px] text-muted">
+            <span>Model (optional)</span>
+            <input
+              value={batchModel}
+              onChange={(e) => setBatchModel(e.target.value)}
+              placeholder="claude-sonnet-4-6"
+              title="Passed as --model to batch-runner.sh"
+              className="mt-0.5 w-full rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11px] text-white placeholder:text-muted/60"
+            />
+          </label>
           <NavBtn
             label="Batch dry-run"
             pending={runCmdBusy === 'batch-runner-dry-run'}
             disabled={busyGlobal && runCmdBusy !== 'batch-runner-dry-run'}
-            onClick={() => void runCmd('batch-runner-dry-run')}
+            onClick={() => void runCmd('batch-runner-dry-run', { extraArgs: batchExtraArgs() })}
           />
           <NavBtn
             label="Batch runner"
             pending={runCmdBusy === 'batch-runner'}
             disabled={busyGlobal && runCmdBusy !== 'batch-runner'}
-            onClick={() => void runCmd('batch-runner')}
+            onClick={() => void runCmd('batch-runner', { extraArgs: batchExtraArgs() })}
+          />
+          <NavBtn
+            label="Batch status"
+            pending={runCmdBusy === 'batch-runner-status'}
+            disabled={busyGlobal && runCmdBusy !== 'batch-runner-status'}
+            onClick={() => void runCmd('batch-runner-status')}
+            title="batch-runner.sh --status — snapshot of batch progress"
+          />
+          <NavBtn
+            label="Batch watch"
+            pending={runCmdBusy === 'batch-runner-watch'}
+            disabled={busyGlobal && runCmdBusy !== 'batch-runner-watch'}
+            onClick={() => void runCmd('batch-runner-watch')}
+            title="batch-runner.sh --watch — live refresh until run completes"
           />
 
           <p className="mt-2 px-1 text-[10px] uppercase tracking-wide text-muted">Editors</p>
@@ -1056,6 +1342,12 @@ function DashboardPageInner() {
             disabled={Boolean(ideBusy) && ideBusy !== 'claude-code'}
             onClick={() => void openIde('claude-code')}
           />
+          <NavBtn
+            label="Open Antigravity"
+            pending={ideBusy === 'antigravity'}
+            disabled={Boolean(ideBusy) && ideBusy !== 'antigravity'}
+            onClick={() => void openIde('antigravity')}
+          />
           <NavBtn label="Copy shell recipes" onClick={() => void copyCliRecipes()} />
           <Link
             href="/settings"
@@ -1067,6 +1359,7 @@ function DashboardPageInner() {
             <div className="mt-auto space-y-1 border-t border-border pt-3 text-[10px] text-muted">
               <CliDot ok={cli.claude.available} label="claude" />
               <CliDot ok={cli.cursor.available} label="cursor" />
+              <CliDot ok={cli.antigravity?.available ?? false} label="agy" />
               <CliDot ok={cli.bash.available} label="bash" />
             </div>
           )}
@@ -1083,6 +1376,19 @@ function DashboardPageInner() {
               mainTab === 'applications' ? 'bg-accent/20 text-white' : 'text-muted hover:text-white'
             }`}>
             Applications
+          </button>
+          <button
+            type="button"
+            onClick={() => setMainTab('pipeline')}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+              mainTab === 'pipeline' ? 'bg-accent/20 text-white' : 'text-muted hover:text-white'
+            }`}>
+            Pipeline
+            {pipelineEntries.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-accent/25 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                {pipelineEntries.length}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -1136,6 +1442,40 @@ function DashboardPageInner() {
             />
           )}
 
+          {mainTab === 'pipeline' && (
+            <section className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Pipeline inbox</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Pending URLs from <code className="text-accent">data/pipeline.md</code>. Evaluate
+                    one at a time via the job queue (same as the drawer URL field).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={pipelineRefreshing}
+                  onClick={() => void loadPipeline()}
+                  className="rounded-lg border border-border bg-row px-4 py-2 text-sm text-white hover:border-accent/50 disabled:opacity-40">
+                  {pipelineRefreshing ? 'Refreshing…' : 'Refresh inbox'}
+                </button>
+              </div>
+
+              {pipelineErr && (
+                <p className="rounded-lg border border-rose-800/70 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">
+                  {pipelineErr}
+                </p>
+              )}
+
+              <PipelineInboxTable
+                entries={pipelineEntries}
+                missing={pipelineMissing}
+                evaluatingUrl={evaluatingPipelineUrl}
+                onEvaluate={(url) => void evaluatePipelineUrl(url)}
+              />
+            </section>
+          )}
+
           {mainTab === 'applications' && data && (
             <>
               <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -1145,6 +1485,13 @@ function DashboardPageInner() {
                 <Stat label="With PDF" value={String(data.metrics.withPdf)} />
                 <Stat label="Active (approx.)" value={String(data.metrics.actionable)} />
               </section>
+
+              <FollowupsDuePanel
+                payload={followups}
+                error={followupsErr}
+                loading={refreshing}
+                onOpenApplication={openApplicationByNumber}
+              />
 
               <ApplicationsStatusChips
                 byStatus={data.metrics.byStatus}
@@ -1173,6 +1520,8 @@ function DashboardPageInner() {
                 sortDir={sortDir}
                 density={tableDensity}
                 onDensityChange={handleDensityChange}
+                visibleColumns={visibleColumns}
+                onToggleColumn={handleToggleColumn}
               />
 
               <ApplicationsTable
@@ -1184,6 +1533,7 @@ function DashboardPageInner() {
                 onOpenByNumber={openApplicationByNumber}
                 onClearFilters={clearApplicationFilters}
                 density={tableDensity}
+                visibleColumns={visibleColumns}
               />
             </>
           )}
@@ -1278,7 +1628,18 @@ function DashboardPageInner() {
             </div>
 
             <div>
-              <h3 className="text-[11px] font-medium uppercase text-muted">Recent</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-medium uppercase text-muted">Recent</h3>
+                <label className="flex items-center gap-1 text-[10px] text-muted">
+                  <input
+                    type="checkbox"
+                    checked={showArchivedJobs}
+                    onChange={(e) => setShowArchivedJobs(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Archived
+                </label>
+              </div>
               <ul className="mt-1 max-h-40 overflow-auto rounded-lg border border-border text-[11px] font-mono text-muted">
                 {jobSummaries.length === 0 && (
                   <li className="px-2 py-2 text-muted">No jobs yet.</li>
@@ -1300,6 +1661,12 @@ function DashboardPageInner() {
                         <span className="opacity-70">({j.logLines})</span>
                       </span>
                       <span className="mt-0.5 truncate opacity-70">{j.id}</span>
+                      {j.url ? (
+                        <span className="mt-0.5 truncate text-[10px] text-white/80">{j.url}</span>
+                      ) : null}
+                      {j.error ? (
+                        <span className="mt-0.5 line-clamp-2 text-[10px] text-rose-300">{j.error}</span>
+                      ) : null}
                       <span className="mt-0.5 text-[10px] text-accent/80">
                         Tap for job card
                       </span>
@@ -1386,7 +1753,18 @@ function DashboardPageInner() {
       <QueueJobModal
         job={inspectJob}
         onClose={() => setInspectJob(null)}
-        onFocusStream={(id) => setStreamJobId(id)}
+        onFocusStream={(id) => {
+          streamJobIdGraceRef.current = id;
+          setStreamJobId(id);
+          setDrawerOpen(true);
+        }}
+        onJobChanged={refreshJobList}
+        onRestarted={(newJobId) => {
+          streamJobIdGraceRef.current = newJobId;
+          setStreamJobId(newJobId);
+          setDrawerOpen(true);
+          void refreshJobList();
+        }}
       />
 
       <ReportViewerModal

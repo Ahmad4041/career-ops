@@ -29,6 +29,10 @@ afterEach(() => {
 });
 
 describe('parseSafeSettingsPath', () => {
+  it('allows voice-dna.md', () => {
+    expect(parseSafeSettingsPath('voice-dna.md')).toBe('voice-dna.md');
+  });
+
   it('allows discovered template paths', () => {
     expect(parseSafeSettingsPath('templates/cv-minimal-slot.html')).toBe(
       'templates/cv-minimal-slot.html',

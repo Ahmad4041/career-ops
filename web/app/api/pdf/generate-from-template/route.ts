@@ -19,6 +19,17 @@ function sanitizeFileStem(s: string): string {
     .slice(0, 100);
 }
 
+function pdfStepErrorMessage(stderr: string): string {
+  const tail = stderr.trim().split(/\r?\n/).filter(Boolean).pop() ?? '';
+  const failedMatch = tail.match(/PDF generation failed:\s*(.+)$/);
+  if (failedMatch?.[1]) return failedMatch[1];
+  if (/Executable doesn't exist|playwright install/i.test(stderr)) {
+    return 'Playwright Chromium is not installed. Run: npx playwright install chromium';
+  }
+  if (tail) return tail;
+  return 'generate-pdf.mjs failed';
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -203,7 +214,7 @@ export async function POST(request: Request) {
 
     if (r2.code !== 0) {
       return Response.json(
-        { ok: false, error: 'generate-pdf.mjs failed (needs Playwright / Chromium)', phases },
+        { ok: false, error: pdfStepErrorMessage(r2.stderr), phases },
         { status: 502 },
       );
     }

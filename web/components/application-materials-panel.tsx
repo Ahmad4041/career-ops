@@ -21,10 +21,19 @@ const PHASE_LABELS: Record<MaterialPhase, string> = {
 
 const PHASE_HINTS: Record<MaterialPhase, string> = {
   summary: '2–3 paragraphs for ATS summary or LinkedIn. Uses report + cv.md.',
-  coverLetter: '250–400 words, plain text. Optional — generate only if you need it.',
+  coverLetter:
+    '250–400 words, plain text. Optional salutation above; body generates without repeating it.',
   recruiterMessage: 'LinkedIn-style note (max 300 chars). Based on contacto rules.',
   customQuestions: 'One question per line, then Generate to answer from CV + report.',
 };
+
+function coverLetterCopyText(salutation: string, body: string): string {
+  const s = salutation.trim();
+  const b = body.trim();
+  if (s && b) return `${s}\n\n${b}`;
+  if (s) return s;
+  return b;
+}
 
 function emptyPhaseState(): Record<MaterialPhase, PhaseState> {
   return {
@@ -161,6 +170,7 @@ export function ApplicationMaterialsPanel({
     onChange: (v: string) => void,
     rows: number,
     extra?: ReactNode,
+    copyValue?: string,
   ) => {
     const st = phaseState[phase];
     return (
@@ -202,10 +212,10 @@ export function ApplicationMaterialsPanel({
               className="rounded-lg bg-accent/90 px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-50 hover:bg-accent">
               {st.busy ? 'Generating…' : 'Generate'}
             </button>
-            {value.trim() ? (
+            {value.trim() || (copyValue ?? '').trim() ? (
               <button
                 type="button"
-                onClick={() => void copyText(value)}
+                onClick={() => void copyText(copyValue ?? value)}
                 className="rounded-lg border border-border px-3 py-1.5 text-xs text-white hover:border-accent/50">
                 Copy
               </button>
@@ -272,9 +282,25 @@ export function ApplicationMaterialsPanel({
         {renderPhase('summary', materials.summary, (v) =>
           setMaterials((m) => (m ? { ...m, summary: v } : m)),
         8)}
-        {renderPhase('coverLetter', materials.coverLetter, (v) =>
-          setMaterials((m) => (m ? { ...m, coverLetter: v } : m)),
-        12)}
+        {renderPhase(
+          'coverLetter',
+          materials.coverLetter,
+          (v) => setMaterials((m) => (m ? { ...m, coverLetter: v } : m)),
+          12,
+          <label className="block text-xs">
+            <span className="text-muted">Salutation (optional)</span>
+            <input
+              type="text"
+              value={materials.coverLetterSalutation}
+              onChange={(e) =>
+                setMaterials((m) => (m ? { ...m, coverLetterSalutation: e.target.value } : m))
+              }
+              placeholder="Dear Hiring Manager,"
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-white placeholder:text-muted/70"
+            />
+          </label>,
+          coverLetterCopyText(materials.coverLetterSalutation, materials.coverLetter),
+        )}
         {renderPhase('recruiterMessage', materials.recruiterMessage, (v) =>
           setMaterials((m) => (m ? { ...m, recruiterMessage: v } : m)),
         4)}

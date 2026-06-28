@@ -7,24 +7,28 @@ import { getCareerOpsRoot } from '@/lib/root';
 import { nextReportNumber } from '@/lib/next-report-number';
 import { substituteBatchPrompt } from '@/lib/substitute-batch-prompt';
 
-export type PreparedClaudeBatch = {
+export type PreparedBatchEval = {
   root: string;
-  claudeBin: string;
-  args: string[];
   reportNum: string;
   batchId: string;
+  date: string;
+  jdPath: string;
   tmpBase: string;
+  resolvedPromptPath: string;
+  userMessage: string;
   cleanup: () => Promise<void>;
 };
 
-/** Build claude CLI args identical to batch/batch-runner worker (sans log redirect). */
-export async function prepareClaudeBatchEval(
-  claudeBin: string,
-  opts: {
-    url: string;
-    jdText?: string;
-  },
-): Promise<PreparedClaudeBatch> {
+export type PreparedClaudeBatch = PreparedBatchEval & {
+  claudeBin: string;
+  args: string[];
+};
+
+/** Shared batch prep for dashboard evaluate jobs (Claude + Cursor). */
+export async function prepareBatchEval(opts: {
+  url: string;
+  jdText?: string;
+}): Promise<PreparedBatchEval> {
   const root = getCareerOpsRoot();
   const promptTemplatePath = path.join(root, 'batch', 'batch-prompt.md');
   if (!fs.existsSync(promptTemplatePath)) {
@@ -52,29 +56,28 @@ export async function prepareClaudeBatchEval(
   await fsPromises.writeFile(resolvedPromptPath, resolvedMd, 'utf8');
 
   const userMessage = [
-    'Procesa esta oferta de empleo. Ejecuta el pipeline completo: evaluación A-F + report .md + PDF + tracker line.',
+    'Process this job posting. Run the full pipeline: A–G evaluation + report .md + PDF + tracker TSV line.',
     `URL: ${opts.url.trim()}`,
     `JD file: ${jdPath}`,
     `Report number: ${reportNum}`,
     `Date: ${date}`,
     `Batch ID: ${batchId}`,
+    '',
+    'You MUST write files to disk (not chat-only):',
+    `- reports/${reportNum}-<company-slug>-${date}.md`,
+    `- batch/tracker-additions/${reportNum}-<company-slug>.tsv`,
+    '- tailored HTML under output/ + PDF via generate-pdf.mjs when score warrants it',
   ].join('\n');
-
-  const args = [
-    '-p',
-    '--dangerously-skip-permissions',
-    '--append-system-prompt-file',
-    resolvedPromptPath,
-    userMessage,
-  ];
 
   return {
     root,
-    claudeBin,
-    args,
     reportNum,
     batchId,
+    date,
+    jdPath,
     tmpBase,
+    resolvedPromptPath,
+    userMessage,
     cleanup: async () => {
       try {
         await fsPromises.rm(tmpBase, { recursive: true, force: true });
@@ -83,4 +86,32 @@ export async function prepareClaudeBatchEval(
       }
     },
   };
+}
+
+/** Build claude CLI args identical to batch/batch-runner worker (sans log redirect). */
+export async function prepareClaudeBatchEval(
+  claudeBin: string,
+  opts: {
+    url: string;
+    jdText?: string;
+  },
+): Promise<PreparedClaudeBatch> {
+  const prepared = await prepareBatchEval(opts);
+  const args = [
+    '-p',
+    '--dangerously-skip-permissions',
+    '--append-system-prompt-file',
+    prepared.resolvedPromptPath,
+    prepared.userMessage,
+  ];
+
+  return {
+    ...prepared,
+    claudeBin,
+    args,
+  };
+}
+
+export async function buildCursorBatchPrompt(opts: { url: string; jdText?: string }): Promise<PreparedBatchEval> {
+  return prepareBatchEval(opts);
 }

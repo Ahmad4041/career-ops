@@ -2,12 +2,25 @@ import type { MaterialPhase } from '@/lib/application-materials/types';
 import type { MaterialsContext } from '@/lib/application-materials/build-context';
 import { contextBlock } from '@/lib/application-materials/build-context';
 
-export function phaseTask(phase: MaterialPhase, questions: string): string {
+export function phaseTask(
+  phase: MaterialPhase,
+  questions: string,
+  coverLetterSalutation = '',
+): string {
   switch (phase) {
     case 'summary':
       return 'Write ONLY the tailored professional summary (plain text, 2-3 paragraphs). No headings, no markdown.';
-    case 'coverLetter':
-      return 'Write ONLY the cover letter (plain text, 250-400 words). No headings, no markdown.';
+    case 'coverLetter': {
+      const salutation = coverLetterSalutation.trim();
+      if (salutation) {
+        return [
+          `The candidate set this salutation (use exactly; do not invent another): "${salutation}"`,
+          'Write ONLY the cover letter body (plain text, 250-400 words). Do NOT repeat the salutation in the text output.',
+          'No headings, no markdown.',
+        ].join(' ');
+      }
+      return 'Write ONLY the full cover letter (plain text, 250-400 words). No headings, no markdown.';
+    }
     case 'recruiterMessage':
       return 'Write ONLY the recruiter LinkedIn message. MAX 300 characters. Plain text.';
     case 'customQuestions': {
@@ -63,8 +76,9 @@ export function buildUserPrompt(
   ctx: MaterialsContext,
   phase: MaterialPhase,
   questions: string,
+  coverLetterSalutation = '',
 ): string {
-  const task = phaseTask(phase, questions);
+  const task = phaseTask(phase, questions, coverLetterSalutation);
   return [
     `Workspace: ${ctx.root}`,
     '',

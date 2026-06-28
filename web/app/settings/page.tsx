@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { LanguageModesPicker } from '@/components/language-modes-picker';
 import {
   jobQueueConfirmLabel,
   loadJobQueueConfirm,
@@ -318,6 +319,9 @@ function buildMarkdownAgentStarterPrompt(filePath: string): string {
   } else if (p === 'modes/_profile.md') {
     fileHint =
       'Profile modes overlay: archetypes, narrative, negotiation, proof framing. Keep user-specific; never put this content in modes/_shared.md.';
+  } else if (p === 'voice-dna.md') {
+    fileHint =
+      'Optional writing guardrail: banned words, anti-AI-slop patterns, and conversational voice tiers. Used by modes when generating cover letters and outreach; _profile.md wins on conflicts. See modes/_shared.md → Voice DNA.';
   } else if (p === 'article-digest.md') {
     fileHint = 'Optional compact proof points / article bullets for evaluations. Short, scannable lines.';
   } else if (p === 'interview-prep/story-bank.md') {
@@ -653,62 +657,71 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-surface text-[var(--fg)] md:flex-row">
-      <aside className="flex w-full shrink-0 flex-col border-border md:w-64 md:border-r">
-        <div className="border-b border-border px-3 py-3">
+    <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-surface text-[var(--fg)] md:flex-row">
+      <aside className="flex max-h-[min(46vh,28rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border md:h-full md:max-h-none md:w-64 md:border-b-0 md:border-r">
+        <div className="shrink-0 border-b border-border px-3 py-3">
           <Link href="/" className="text-xs font-medium text-accent hover:underline">
             ← Dashboard
           </Link>
           <h1 className="mt-2 text-lg font-semibold text-white">Customize</h1>
-          <p className="mt-1 text-xs text-muted">
-            Edit allowlisted user files and CV templates. Paths are validated server-side.
-          </p>
-          {root && <p className="mt-2 break-all font-mono text-[10px] text-muted">{root}</p>}
-          <div className="mt-3">
-            <DashboardPrefsPanel />
-          </div>
         </div>
-        <nav className="flex-1 overflow-y-auto p-2">
-          {loadingCatalog && <p className="px-2 text-xs text-muted">Loading…</p>}
-          {catalogErr && (
-            <p className="px-2 text-xs text-rose-300">{catalogErr}</p>
-          )}
-          {GROUP_ORDER.map((g) => {
-            const rows = grouped.get(g) ?? [];
-            if (rows.length === 0) return null;
-            return (
-              <div key={g} className="mb-4">
-                <p className="mb-1 px-2 text-[10px] uppercase tracking-wide text-muted">
-                  {GROUP_TITLE[g]}
-                </p>
-                <ul className="space-y-0.5">
-                  {rows.map((f) => (
-                    <li key={f.path}>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(f.path)}
-                        className={`w-full rounded-lg border px-2 py-2 text-left text-xs transition ${
-                          selected === f.path
-                            ? 'border-accent/60 bg-accent/15 text-white'
-                            : 'border-transparent text-muted hover:bg-row/80 hover:text-white'
-                        }`}>
-                        <span className="block font-medium">{f.label}</span>
-                        <span className="block truncate font-mono text-[10px] opacity-70">
-                          {f.path}
-                        </span>
-                        {!f.exists && (
-                          <span className="mt-0.5 block text-[10px] text-amber-300/90">
-                            New file on save
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="border-b border-border px-3 py-3">
+            <p className="text-xs text-muted">
+              Edit allowlisted user files and CV templates. Paths are validated server-side.
+            </p>
+            {root && <p className="mt-2 break-all font-mono text-[10px] text-muted">{root}</p>}
+            <div className="mt-3 space-y-0">
+              <LanguageModesPicker
+                onProfileUpdated={() => {
+                  if (selected === 'config/profile.yml') void loadFile('config/profile.yml');
+                }}
+              />
+              <DashboardPrefsPanel />
+            </div>
+          </div>
+          <nav className="p-2 pb-4" aria-label="Settings files">
+            {loadingCatalog && <p className="px-2 text-xs text-muted">Loading…</p>}
+            {catalogErr && (
+              <p className="px-2 text-xs text-rose-300">{catalogErr}</p>
+            )}
+            {GROUP_ORDER.map((g) => {
+              const rows = grouped.get(g) ?? [];
+              if (rows.length === 0) return null;
+              return (
+                <div key={g} className="mb-4">
+                  <p className="mb-1 px-2 text-[10px] uppercase tracking-wide text-muted">
+                    {GROUP_TITLE[g]}
+                  </p>
+                  <ul className="space-y-0.5">
+                    {rows.map((f) => (
+                      <li key={f.path}>
+                        <button
+                          type="button"
+                          onClick={() => setSelected(f.path)}
+                          className={`w-full rounded-lg border px-2 py-2 text-left text-xs transition ${
+                            selected === f.path
+                              ? 'border-accent/60 bg-accent/15 text-white'
+                              : 'border-transparent text-muted hover:bg-row/80 hover:text-white'
+                          }`}>
+                          <span className="block font-medium">{f.label}</span>
+                          <span className="block truncate font-mono text-[10px] opacity-70">
+                            {f.path}
                           </span>
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </nav>
+                          {!f.exists && (
+                            <span className="mt-0.5 block text-[10px] text-amber-300/90">
+                              New file on save
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </nav>
+        </div>
       </aside>
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">

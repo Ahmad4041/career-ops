@@ -24,7 +24,10 @@
     "tracker": "node tracker.mjs",
     "patterns": "node analyze-patterns.mjs",
     "gemini:eval": "node gemini-eval.mjs",
-    "postinstall": "npx playwright install chromium --with-deps || npx playwright install chromium --with-deps"
+    "postinstall": "npx playwright install chromium --with-deps || npx playwright install chromium --with-deps",
+    "hostinger:install": "npm ci --ignore-scripts && npm ci --prefix web",
+    "hostinger:build": "npm run build --prefix web",
+    "hostinger:start": "npm run start --prefix web -- -p ${PORT:-3100}"
   },
   "keywords": [
     "ai",

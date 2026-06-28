@@ -1,5 +1,5 @@
 import { prepareClaudeBatchEval } from './claude-batch-prepared';
-import { appendLog } from './store';
+import { appendLog } from '@/lib/jobs/store';
 import { spawnWithLogLines } from './spawn-stream-logs';
 
 export async function runClaudeEvaluateJob(

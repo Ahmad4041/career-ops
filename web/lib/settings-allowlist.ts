@@ -46,6 +46,13 @@ export const EDITABLE_SETTINGS_FILES: readonly SettingsFileMeta[] = [
     description: 'Your archetypes, narrative, negotiation — never put this in modes/_shared.md.',
   },
   {
+    path: 'voice-dna.md',
+    group: 'modes',
+    label: 'Voice DNA',
+    description:
+      'Optional anti-AI-slop writing guardrail — banned words, tone rules, and voice for cover letters and outreach.',
+  },
+  {
     path: 'portals.yml',
     group: 'data',
     label: 'Portal scanner',

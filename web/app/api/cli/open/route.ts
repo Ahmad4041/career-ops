@@ -13,11 +13,33 @@ export async function POST(request: Request) {
   const target =
     typeof body === 'object' && body !== null && 'target' in body ? (body as { target: string }).target : '';
 
-  if (target !== 'cursor' && target !== 'claude-code') {
-    return Response.json({ error: 'target must be cursor or claude-code' }, { status: 400 });
+  if (target !== 'cursor' && target !== 'claude-code' && target !== 'antigravity') {
+    return Response.json({ error: 'target must be cursor, claude-code, or antigravity' }, { status: 400 });
   }
 
   const root = getCareerOpsRoot();
+
+  if (target === 'antigravity') {
+    const agyBin = resolveBinary('ANTIGRAVITY_CLI_PATH', 'agy');
+    if (!agyBin) {
+      return Response.json(
+        {
+          ok: false,
+          error: '`agy` not found in PATH. Install Antigravity CLI or set ANTIGRAVITY_CLI_PATH.',
+        },
+        { status: 404 },
+      );
+    }
+    const r = spawnDetached(agyBin, [], root);
+    return Response.json({
+      ok: r.ok,
+      target,
+      pid: r.pid,
+      command: `cd "${root}" && "${agyBin}"`,
+      careerOpsRoot: root,
+      error: r.error,
+    });
+  }
 
   if (target === 'cursor') {
     const bin = resolveBinary('CURSOR_CLI_PATH', 'cursor');

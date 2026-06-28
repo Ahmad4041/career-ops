@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { basenameOnly, findArtifactForReport } from '@/lib/artifacts-for-report';
+import { deriveNoteFields } from '@/lib/derive-note-fields';
 import { normalizeStatus } from '@/lib/normalize-tracker-status';
 
 /** Re-export for callers that already imported from `applications-parser`. */
@@ -27,6 +28,10 @@ export type CareerApplication = {
   /** When set, this row is a later duplicate of tracker #duplicateOf (see merge-tracker rules). */
   duplicateOf: number | null;
   duplicateNote: string | null;
+  /** Derived from notes/role (see derive-note-fields.ts). */
+  location: string;
+  payRange: string;
+  lastContact: string;
 };
 
 export type PipelineMetrics = {
@@ -41,6 +46,95 @@ export type PipelineMetrics = {
 const reReportLink = /\[(\d+)\]\(([^)]+)\)/;
 const reScoreValue = /(\d+\.?\d*)\/5/;
 const reReportURL = /^\*\*URL:\*\*\s*(https?:\/\/\S+)/im;
+
+const CANONICAL_STATUS_RE =
+  /\b(evaluated|applied|responded|interview|offer|rejected|discarded|skip|aplicad[ao]|enviada|rechazad[ao]|entrevista|oferta)\b/i;
+
+function looksLikeScore(cell: string): boolean {
+  return reScoreValue.test(cell.trim());
+}
+
+function looksLikeStatus(cell: string): boolean {
+  const t = cell.replace(/\*\*/g, '').trim();
+  if (!t || looksLikeScore(t) || t.includes('✅') || t.includes('❌')) return false;
+  return CANONICAL_STATUS_RE.test(t);
+}
+
+function looksLikePdfCell(cell: string): boolean {
+  return cell.includes('✅') || cell.includes('❌');
+}
+
+/** Map tracker row cells when columns are shifted (extra field) or score/status swapped. */
+export function resolveTrackerRowFields(fields: string[]): {
+  scoreRaw: string;
+  score: number;
+  status: string;
+  hasPdf: boolean;
+  reportPath: string;
+  reportNumber: string;
+  notes: string;
+} {
+  let reportNumber = '';
+  let reportPath = '';
+  let reportIdx = -1;
+  for (let i = 0; i < fields.length; i++) {
+    const m = fields[i].match(reReportLink);
+    if (m) {
+      reportNumber = m[1];
+      reportPath = m[2];
+      reportIdx = i;
+      break;
+    }
+  }
+
+  let scoreIdx = fields.findIndex((f) => looksLikeScore(f));
+  if (scoreIdx < 0) scoreIdx = 4;
+
+  const scoreRaw = fields[scoreIdx] ?? '';
+  const sm = scoreRaw.match(reScoreValue);
+  const score = sm ? parseFloat(sm[1]) : 0;
+
+  let status = fields[5] ?? 'Evaluated';
+  for (let i = scoreIdx + 1; i < fields.length; i++) {
+    if (i === reportIdx) break;
+    if (looksLikePdfCell(fields[i])) break;
+    if (looksLikeStatus(fields[i])) {
+      status = fields[i].replace(/\*\*/g, '').trim();
+      break;
+    }
+  }
+
+  let hasPdf = false;
+  for (let i = scoreIdx + 1; i < fields.length; i++) {
+    if (i === reportIdx) break;
+    if (fields[i].includes('✅')) {
+      hasPdf = true;
+      break;
+    }
+    if (fields[i].includes('❌')) {
+      hasPdf = false;
+      break;
+    }
+  }
+
+  const notes =
+    reportIdx >= 0 && reportIdx < fields.length - 1
+      ? fields
+          .slice(reportIdx + 1)
+          .join(' ')
+          .trim()
+      : (fields[fields.length - 1] ?? '');
+
+  return { scoreRaw, score, status, hasPdf, reportPath, reportNumber, notes };
+}
+
+/** Root-relative `reports/…` path for API and artifact lookup. */
+export function normalizeReportPath(raw: string): string {
+  const s = raw.replace(/\\/g, '/').trim();
+  const idx = s.indexOf('reports/');
+  if (idx >= 0) return s.slice(idx);
+  return s.replace(/^(\.\.\/)+/, '');
+}
 
 /** Pipe/TSV tracker row splitter (applications.md body rows). */
 export function splitTableLine(line: string): string[] {
@@ -180,33 +274,34 @@ export function parseApplications(root: string): { apps: CareerApplication[]; tr
     const n = parseInt(fields[0], 10);
     if (!Number.isNaN(n)) trackerNumber = n;
 
-    const scoreRaw = fields[4];
-    let score = 0;
-    const sm = scoreRaw.match(reScoreValue);
-    if (sm) score = parseFloat(sm[1]);
-
-    const rm = fields[7].match(reReportLink);
-    const reportNumber = rm?.[1] ?? '';
-    const reportPath = rm?.[2] ?? '';
+    const role = fields[3];
+    const date = fields[1];
+    const { scoreRaw, score, status, hasPdf, reportPath: reportPathRaw, reportNumber, notes } =
+      resolveTrackerRowFields(fields);
+    const reportPath = normalizeReportPath(reportPathRaw);
+    const derived = deriveNoteFields({ role, notes, date });
 
     const app: CareerApplication = {
       number: trackerNumber,
-      date: fields[1],
+      date,
       company: fields[2],
-      role: fields[3],
+      role,
       scoreRaw,
       score,
-      status: fields[5],
-      hasPdf: fields[6].includes('✅'),
+      status,
+      hasPdf,
       reportPath,
       reportNumber,
-      notes: fields[8] ?? '',
+      notes,
       jobUrl: '',
       linkedPdfBasename: null,
       linkedHtmlBasename: null,
       linkedTexBasename: null,
       duplicateOf: null,
       duplicateNote: null,
+      location: derived.location,
+      payRange: derived.payRange,
+      lastContact: derived.lastContact,
     };
     apps.push(app);
   }

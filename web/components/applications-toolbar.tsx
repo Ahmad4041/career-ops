@@ -2,8 +2,10 @@
 
 import type { RefObject } from 'react';
 
+import { ApplicationsColumnPicker } from '@/components/applications-column-picker';
 import type { SortDir, SortKey } from '@/lib/applications-table-query';
 import type { TableDensity } from '@/lib/table-density';
+import type { OptionalColumnId, TableColumnVisibility } from '@/lib/table-columns';
 
 export function ApplicationsToolbar({
   anchorRef,
@@ -24,6 +26,8 @@ export function ApplicationsToolbar({
   sortDir,
   density,
   onDensityChange,
+  visibleColumns,
+  onToggleColumn,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   searchInputRef?: RefObject<HTMLInputElement | null>;
@@ -44,6 +48,8 @@ export function ApplicationsToolbar({
   sortDir: SortDir;
   density: TableDensity;
   onDensityChange: (d: TableDensity) => void;
+  visibleColumns: TableColumnVisibility;
+  onToggleColumn: (id: OptionalColumnId) => void;
 }) {
   return (
     <section
@@ -97,6 +103,12 @@ export function ApplicationsToolbar({
             ))}
           </select>
         </label>
+        <div className="flex flex-wrap items-end gap-2">
+          <ApplicationsColumnPicker
+            visibleColumns={visibleColumns}
+            onToggleColumn={onToggleColumn}
+          />
+        </div>
         <div className="flex flex-wrap items-end gap-2">
           <span className="text-[10px] font-medium uppercase tracking-wide text-muted">Density</span>
           <div className="inline-flex overflow-hidden rounded-lg border border-border">

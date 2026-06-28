@@ -1,7 +1,9 @@
-import { getCareerOpsRoot } from '@/lib/root';
-import { resolveBinary } from '@/lib/resolve-binary';
+import { readFile } from 'fs/promises';
 
-import { appendLog } from './store';
+import { resolveBinary } from '@/lib/resolve-binary';
+import { appendLog } from '@/lib/jobs/store';
+
+import { buildCursorBatchPrompt } from './claude-batch-prepared';
 import { spawnWithLogLines } from './spawn-stream-logs';
 
 /**
@@ -23,28 +25,6 @@ export function resolveCursorAgentLaunch(): { cmd: string; argvPrefix: string[] 
   return null;
 }
 
-function buildCursorPrompt(url: string, jdText?: string): string {
-  const root = getCareerOpsRoot();
-  const jd = jdText?.trim();
-
-  return [
-    'You operate inside career-ops — a Markdown + Node repository for structured job-offer workflows.',
-    `Workspace directory: ${root}`,
-    '',
-    'Execute the Career Ops **auto-pipeline** for one job posting:',
-    '1. Open and follow `.claude/skills/career-ops/SKILL.md` (router + modes). For a URL/JD pair this maps to AUTO-PIPELINE.',
-    '2. Load whatever context blocks that mode mandates (typically `modes/_shared.md` plus the evaluation/pipeline docs).',
-    '3. Use `cv.md`, `config/profile.yml`, optional `modes/_profile.md`, and tooling already in-repo (reports/, generate-pdf.mjs, etc.).',
-    '4. Obey project ethics: assess fit, draft outputs, but never submit applications on the user\'s behalf.',
-    '5. Read **`modes/_profile.md`** — follow output-language policy (default: full report in English).',
-    '',
-    `**Posting URL:** ${url}`,
-    jd ? `\n**Pasted JD (optional):**\n${jd}` : '\n**(No pasted JD)** — derive content from URL + tooling as feasible.',
-    '',
-    'Produce or update artefacts the pipeline normally would (evaluation report, tracker additions, PDF when appropriate). Use repo tools (Playwright, node scripts) per project instructions.',
-  ].join('\n');
-}
-
 export async function runCursorEvaluateJob(
   jobId: string,
   opts: { url: string; jdText?: string },
@@ -59,11 +39,35 @@ export async function runCursorEvaluateJob(
     return 1;
   }
 
-  const root = getCareerOpsRoot();
+  appendLog(jobId, 'info', 'Preparing Cursor agent with batch/batch-prompt.md (same as Claude worker)…');
+
+  let prepared: Awaited<ReturnType<typeof buildCursorBatchPrompt>>;
+  try {
+    prepared = await buildCursorBatchPrompt(opts);
+  } catch (e) {
+    appendLog(jobId, 'stderr', e instanceof Error ? e.message : 'prepare failed');
+    return 1;
+  }
+
+  appendLog(jobId, 'info', `Report #: ${prepared.reportNum}, batch ${prepared.batchId}, cwd=${prepared.root}`);
+
+  const root = prepared.root;
   const modelId = process.env.CURSOR_AGENT_MODEL?.trim();
   const timeoutMs = Number(process.env.CURSOR_AGENT_TIMEOUT_MS ?? 1_800_000);
   const useStreamJson = process.env.CURSOR_AGENT_OUTPUT_FORMAT === 'stream-json';
   const outputFormat = useStreamJson ? 'stream-json' : 'text';
+
+  const systemPrompt = await readFile(prepared.resolvedPromptPath, 'utf8');
+  const prompt = [
+    'You operate inside career-ops. Follow the batch worker instructions below exactly.',
+    'CRITICAL: Write evaluation artefacts to disk. A chat summary alone is a failure.',
+    '',
+    prepared.userMessage,
+    '',
+    '---',
+    '',
+    systemPrompt,
+  ].join('\n');
 
   const args: string[] = [
     ...launch.argvPrefix,
@@ -88,7 +92,6 @@ export async function runCursorEvaluateJob(
     args.push('--yolo');
   }
 
-  const prompt = buildCursorPrompt(opts.url, opts.jdText);
   args.push(prompt);
 
   appendLog(
@@ -96,7 +99,7 @@ export async function runCursorEvaluateJob(
     'info',
     `Starting Cursor agent CLI: ${launch.cmd} ${launch.argvPrefix.join(' ')} --print --trust --workspace <repo> … (model=${modelId || 'default'})`,
   );
-  appendLog(jobId, 'stdout', `$ ${launch.cmd} ${args.slice(0, launch.argvPrefix.length + 12).join(' ')} … [prompt]`);
+  appendLog(jobId, 'stdout', `$ ${launch.cmd} ${args.slice(0, launch.argvPrefix.length + 12).join(' ')} … [batch prompt]`);
 
   const env = { ...process.env };
   if (!env.CURSOR_API_KEY?.trim()) {
@@ -107,43 +110,46 @@ export async function runCursorEvaluateJob(
     );
   }
 
-  const code = await spawnWithLogLines(
-    launch.cmd,
-    args,
-    {
-      cwd: root,
-      env,
-      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 1_800_000,
-    },
-    (channel, line) => {
-      if (channel === 'stdout' && useStreamJson) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('{')) {
-          try {
-            const o = JSON.parse(trimmed) as Record<string, unknown>;
-            const type = String(o.type ?? 'msg');
-            const text =
-              (typeof o.text === 'string' && o.text) ||
-              (typeof o.delta === 'string' && o.delta) ||
-              (typeof o.content === 'string' && o.content) ||
-              trimmed;
-            appendLog(jobId, type === 'error' ? 'stderr' : 'stdout', `[${type}] ${text}`);
-            return;
-          } catch {
-            /* fallthrough */
+  try {
+    const code = await spawnWithLogLines(
+      launch.cmd,
+      args,
+      {
+        cwd: root,
+        env,
+        timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 1_800_000,
+      },
+      (channel, line) => {
+        if (channel === 'stdout' && useStreamJson) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('{')) {
+            try {
+              const o = JSON.parse(trimmed) as Record<string, unknown>;
+              const type = String(o.type ?? 'msg');
+              const text =
+                (typeof o.text === 'string' && o.text) ||
+                (typeof o.delta === 'string' && o.delta) ||
+                (typeof o.content === 'string' && o.content) ||
+                trimmed;
+              appendLog(jobId, type === 'error' ? 'stderr' : 'stdout', `[${type}] ${text}`);
+              return;
+            } catch {
+              /* fallthrough */
+            }
           }
         }
-      }
-      // Cursor CLI logs internal trace paths to stderr; not application errors.
-      if (channel === 'stderr' && line.trimStart().startsWith('cursor-retrieval:')) {
-        appendLog(jobId, 'info', line.trimEnd());
-        return;
-      }
-      appendLog(jobId, channel, line);
-    },
-  );
+        if (channel === 'stderr' && line.trimStart().startsWith('cursor-retrieval:')) {
+          appendLog(jobId, 'info', line.trimEnd());
+          return;
+        }
+        appendLog(jobId, channel, line);
+      },
+    );
 
-  if (code === 0) appendLog(jobId, 'info', 'Cursor agent CLI exited successfully.');
-  else appendLog(jobId, 'stderr', `Cursor agent CLI exited with code ${code}`);
-  return code;
+    if (code === 0) appendLog(jobId, 'info', 'Cursor agent CLI exited successfully.');
+    else appendLog(jobId, 'stderr', `Cursor agent CLI exited with code ${code}`);
+    return code;
+  } finally {
+    await prepared.cleanup();
+  }
 }

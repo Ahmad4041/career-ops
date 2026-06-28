@@ -181,6 +181,7 @@ async function runGeminiMaterials(
   applicationNumber: number,
   phase: MaterialPhase,
   questions: string,
+  greeting: string,
   timeoutMs: number,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const script = path.join(root, 'generate-application-materials.mjs');
@@ -191,6 +192,9 @@ async function runGeminiMaterials(
   if (phase === 'customQuestions' && questions.trim()) {
     args.push(`--questions=${questions}`);
   }
+  if (phase === 'coverLetter' && greeting.trim()) {
+    args.push(`--greeting=${greeting.trim()}`);
+  }
   return runWithTimeout(process.execPath, args, { cwd: root, env: process.env, timeoutMs });
 }
 
@@ -198,6 +202,7 @@ export async function generateMaterialsWithAgent(opts: {
   app: CareerApplication;
   phase: MaterialPhase;
   questions: string;
+  coverLetterSalutation?: string;
   provider: MaterialsProvider;
 }): Promise<ParsedMaterialResult & { stderr?: string; exitCode?: number }> {
   const ctx = buildMaterialsContext(opts.app);
@@ -206,7 +211,14 @@ export async function generateMaterialsWithAgent(opts: {
   let run: { code: number; stdout: string; stderr: string };
 
   if (opts.provider === 'gemini') {
-    run = await runGeminiMaterials(ctx.root, opts.app.number, opts.phase, opts.questions, timeoutMs);
+    run = await runGeminiMaterials(
+      ctx.root,
+      opts.app.number,
+      opts.phase,
+      opts.questions,
+      opts.coverLetterSalutation ?? '',
+      timeoutMs,
+    );
     const lastLine = run.stdout
       .trim()
       .split('\n')
@@ -230,7 +242,12 @@ export async function generateMaterialsWithAgent(opts: {
   }
 
   const systemPrompt = buildSystemPrompt(ctx);
-  const userPrompt = buildUserPrompt(ctx, opts.phase, opts.questions);
+  const userPrompt = buildUserPrompt(
+    ctx,
+    opts.phase,
+    opts.questions,
+    opts.coverLetterSalutation ?? '',
+  );
 
   const tmpBase = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'career-ops-mat-'));
 

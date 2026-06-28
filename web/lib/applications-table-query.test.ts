@@ -26,6 +26,9 @@ function app(p: Partial<CareerApplication> & Pick<CareerApplication, 'number' | 
     linkedTexBasename: p.linkedTexBasename ?? null,
     duplicateOf: p.duplicateOf ?? null,
     duplicateNote: p.duplicateNote ?? null,
+    location: '',
+    payRange: '',
+    lastContact: '',
     ...p,
   };
 }

@@ -33,6 +33,8 @@ export function loadMaterials(
       reportPath: raw.reportPath ?? fallback.reportPath,
       customQa: Array.isArray(raw.customQa) ? raw.customQa : [],
       summary: typeof raw.summary === 'string' ? raw.summary : '',
+      coverLetterSalutation:
+        typeof raw.coverLetterSalutation === 'string' ? raw.coverLetterSalutation : '',
       coverLetter: typeof raw.coverLetter === 'string' ? raw.coverLetter : '',
       recruiterMessage: typeof raw.recruiterMessage === 'string' ? raw.recruiterMessage : '',
       customQuestionsInput:

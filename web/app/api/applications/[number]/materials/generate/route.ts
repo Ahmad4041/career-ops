@@ -76,6 +76,7 @@ export async function POST(
       app: row,
       phase: phase as MaterialPhase,
       questions,
+      coverLetterSalutation: materials.coverLetterSalutation,
       provider,
     });
   } catch (e) {

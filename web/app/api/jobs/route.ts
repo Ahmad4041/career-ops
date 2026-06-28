@@ -5,18 +5,27 @@ import { listJobs } from '@/lib/jobs/store';
 const PROVIDERS = new Set(['claude', 'cursor', 'node']);
 const OPS = new Set(['evaluate_job', 'portal_scan', 'verify_pipeline', 'merge_tracker']);
 
-export async function GET() {
+function toJobSummary(j: ReturnType<typeof listJobs>[number]) {
+  return {
+    id: j.id,
+    provider: j.provider,
+    operation: j.operation,
+    status: j.status,
+    exitCode: j.exitCode ?? null,
+    createdAt: j.createdAt,
+    updatedAt: j.updatedAt,
+    logLines: j.logs.length,
+    archived: Boolean(j.archived),
+    url: typeof j.meta.url === 'string' ? j.meta.url : undefined,
+    error: j.error,
+  };
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const includeArchived = url.searchParams.get('archived') === '1';
   return Response.json({
-    jobs: listJobs().map((j) => ({
-      id: j.id,
-      provider: j.provider,
-      operation: j.operation,
-      status: j.status,
-      exitCode: j.exitCode ?? null,
-      createdAt: j.createdAt,
-      updatedAt: j.updatedAt,
-      logLines: j.logs.length,
-    })),
+    jobs: listJobs(50, { includeArchived }).map(toJobSummary),
   });
 }
 
